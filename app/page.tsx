@@ -6,6 +6,13 @@ export default function HomePage() {
     <div className="space-y-16">
       {/* Hero Section */}
       <section className="text-center space-y-6 py-12">
+        <div className="inline-block animate-float">
+          <img 
+            src="/logo.svg" 
+            alt="WheelWise Logo" 
+            className="w-32 h-32 md:w-40 md:h-40 mx-auto mb-6 drop-shadow-2xl"
+          />
+        </div>
         <div className="inline-block">
           <h1 className="text-6xl md:text-8xl font-bold bg-gradient-to-r from-neon-blue via-neon-pink to-neon-purple bg-clip-text text-transparent animate-pulse-glow">
             WheelWise

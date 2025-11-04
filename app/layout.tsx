@@ -13,6 +13,11 @@ export const metadata: Metadata = {
   title: 'WheelWise - Smart and Fair Decision Wheel',
   description: 'Interactive, fairness-driven spin-wheel platform with provably fair algorithms, multiplayer features, and custom designs.',
   keywords: ['wheel', 'spinner', 'decision', 'raffle', 'fair', 'random', 'multiplayer'],
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/logo.svg',
+  },
 }
 
 export default function RootLayout({
