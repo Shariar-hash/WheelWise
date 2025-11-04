@@ -26,14 +26,15 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Relations
-  accounts      Account[]
-  sessions      Session[]
-  wheels        Wheel[]
-  spins         Spin[]
-  rooms         Room[]
-  messages      Message[]
-  wheelMembers  WheelMember[]
-  tokenHistory  TokenTransaction[]
+  accounts         Account[]
+  sessions         Session[]
+  wheels           Wheel[]
+  spins            Spin[]
+  hostedRooms      Room[]
+  roomParticipants RoomParticipant[]
+  messages         Message[]
+  wheelMembers     WheelMember[]
+  tokenHistory     TokenTransaction[]
 
   @@index([email])
 }
@@ -184,25 +185,64 @@ model Spin {
 
 // Live spin rooms
 model Room {
-  id          String   @id @default(cuid())
-  code        String   @unique // 6-character join code
-  name        String?
-  hostId      String
-  isActive    Boolean  @default(true)
-  maxMembers  Int      @default(50)
+  id            String   @id @default(cuid())
+  code          String   @unique // 6-character join code
+  name          String?
+  description   String?
+  hostId        String
+  isActive      Boolean  @default(true)
+  isPublic      Boolean  @default(false)
+  maxMembers    Int      @default(50)
+  
+  // Room settings
+  allowGuestJoin    Boolean @default(true)
+  allowParticipantSpin Boolean @default(true)
+  allowParticipantEdit Boolean @default(false)
+  enableChat        Boolean @default(true)
+  enableVoiceChat   Boolean @default(false)
+  
+  // Current wheel state for real-time sync
+  currentWheelState Json? // Active wheel options, spinning state, etc.
   
   createdAt   DateTime @default(now())
   closedAt    DateTime?
+  lastActivity DateTime @default(now())
 
   // Relations
-  host     User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
-  wheels   Wheel[]   // Multiple wheels can be created in a room
-  spins    Spin[]
-  messages Message[]
+  host         User            @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  participants RoomParticipant[]
+  wheels       Wheel[]         // Multiple wheels can be created in a room
+  spins        Spin[]
+  messages     Message[]
 
   @@index([code])
   @@index([hostId])
   @@index([isActive])
+  @@index([isPublic])
+}
+
+// Room participants for real-time collaboration
+model RoomParticipant {
+  id          String   @id @default(cuid())
+  roomId      String
+  userId      String?  // Null for guest users
+  guestName   String?  // Name for guest users
+  role        RoomRole @default(PARTICIPANT)
+  isOnline    Boolean  @default(true)
+  lastSeen    DateTime @default(now())
+  joinedAt    DateTime @default(now())
+  
+  // Permissions
+  canSpin     Boolean  @default(true)
+  canEditWheel Boolean @default(false)
+  canManageRoom Boolean @default(false)
+
+  room Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([roomId, userId]) // Prevent duplicate user entries
+  @@index([roomId])
+  @@index([userId])
 }
 
 // Real-time chat
@@ -246,10 +286,21 @@ enum MemberRole {
   VIEWER
 }
 
+enum RoomRole {
+  HOST
+  MODERATOR
+  PARTICIPANT
+  VIEWER
+}
+
 enum MessageType {
   CHAT
   SYSTEM
   SPIN_RESULT
+  USER_JOINED
+  USER_LEFT
+  WHEEL_CREATED
+  SPIN_COMPLETED
 }
 
 enum TokenType {
