@@ -271,15 +271,9 @@ export default function SpinWheel({
       const winningIndex = calculateWinningSegment(newFinalRotation)
       const actualWinner = validOptions[winningIndex];
       
-      // Temporarily disable detailed logging to prevent React #418 error
-      // console.log('🏆 Spin result verification:', {
-      //   expectedResult: selectedOption.label,
-      //   actualWinner: actualWinner?.label,
-      //   finalRotation: newFinalRotation,
-      //   normalizedRotation: ((newFinalRotation % 360) + 360) % 360,
-      //   winningIndex,
-      //   matches: selectedOption.label === actualWinner?.label
-      // });
+      // Simple verification log to check if wheel alignment is correct
+      const matches = selectedOption.label === actualWinner?.label;
+      console.log(`🎯 Wheel result: Expected "${selectedOption.label}" → Got "${actualWinner?.label}" → ${matches ? '✅ MATCH' : '❌ MISMATCH'}`);
       
       if (onSpinComplete && validOptions[winningIndex]) {
         onSpinComplete({
