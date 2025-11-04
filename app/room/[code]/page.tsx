@@ -297,12 +297,8 @@ export default function Room({ params }: { params: { code: string } }) {
     console.log('✅ Selected option:', selectedOption.label);
     console.log('📤 Inserting spin event to Supabase...');
     
-    // Set spinning state immediately for owner
-    setIsSpinning(true);
-    setResult("");
-    setCurrentSpinResult(selectedOption.label);
-    
     // Insert spin event - this will trigger realtime subscription for all participants
+    // The subscription will handle setting isSpinning, currentSpinResult, and result
     const { data, error } = await supabase
       .from('spin_events')
       .insert({
@@ -314,17 +310,10 @@ export default function Room({ params }: { params: { code: string } }) {
     
     if (error) {
       console.error('❌ Error inserting spin event:', error);
-      setIsSpinning(false);
     } else {
       console.log('✅ Spin event inserted successfully:', data);
+      // The realtime subscription will handle the UI updates for everyone including owner
     }
-    
-    // Show result after animation
-    setTimeout(() => {
-      setResult(selectedOption.label);
-      setIsSpinning(false);
-      setCurrentSpinResult("");
-    }, 4000);
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
