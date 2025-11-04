@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useSession, signOut } from 'next-auth/react'
 import { useTheme } from 'next-themes'
-import { Moon, Sun, User, LogOut, Coins, Menu } from 'lucide-react'
+import { Moon, Sun, User, LogOut, Menu } from 'lucide-react'
 import { useState } from 'react'
 
 export default function Header() {
@@ -64,12 +64,6 @@ export default function Header() {
             {/* User Menu */}
             {session ? (
               <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 px-3 py-1.5 bg-yellow-500/20 rounded-lg border border-yellow-500/30">
-                  <Coins className="w-4 h-4 text-yellow-500" />
-                  <span className="text-sm font-semibold text-yellow-500">
-                    {session.user?.tokens || 0}
-                  </span>
-                </div>
                 <Link
                   href="/profile"
                   className="flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 rounded-lg transition"
