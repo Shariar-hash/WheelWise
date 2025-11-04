@@ -193,14 +193,31 @@ export default function SpinWheel({
         const segmentCenter = (targetSegment.startAngle + targetSegment.endAngle) / 2;
         // Pointer is at top (0 degrees), so we need wheel to rotate so segment center is at top
         targetAngle = (360 - segmentCenter) % 360;
+        console.log('🎯 Target segment:', targetSegment.label, 'center:', segmentCenter, 'targetAngle:', targetAngle);
       }
     }
 
-    // Generate natural random rotation (2000-4000 degrees for realistic spin)
-    const extraRotations = 2000 + Math.random() * 2000;
+    // Generate consistent rotation based on targetResult to sync across clients
+    // Use a simple hash of the targetResult string to get consistent extra rotations
+    let extraRotations = 3000; // Default 3000 degrees (8+ full rotations)
+    if (targetResult) {
+      // Create consistent "random" based on result string
+      let hash = 0;
+      for (let i = 0; i < targetResult.length; i++) {
+        hash = ((hash << 5) - hash) + targetResult.charCodeAt(i);
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      // Use hash to get consistent rotation between 2500-3500 degrees
+      extraRotations = 2500 + (Math.abs(hash) % 1000);
+    } else {
+      extraRotations = 2500 + Math.random() * 1000;
+    }
+    
     const totalRotation = extraRotations + targetAngle;
     const newFinalRotation = rotation + totalRotation;
 
+    console.log('🎡 Spinning to:', newFinalRotation, 'degrees (extra:', extraRotations, '+ target:', targetAngle, ')');
+    
     setRotation(newFinalRotation)
     setFinalRotation(newFinalRotation)
 

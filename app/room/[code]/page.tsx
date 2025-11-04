@@ -458,7 +458,9 @@ export default function Room({ params }: { params: { code: string } }) {
                 <p>No messages yet. Start the conversation!</p>
               </div>
             ) : (
-              messages.map((m, i) => (
+              messages.map((m, i) => {
+                console.log('🖼️ Rendering message:', i, m);
+                return (
                 <div key={i} className={`mb-3 flex ${m.name === name ? 'justify-end' : 'justify-start'}`}>
                   <div className={`flex items-start gap-2 max-w-xs ${m.name === name ? 'flex-row-reverse' : 'flex-row'}`}>
                     {/* Profile Avatar */}
@@ -483,7 +485,7 @@ export default function Room({ params }: { params: { code: string } }) {
                           {m.name} {m.name === roomOwner && '👑'}
                         </div>
                       )}
-                      <div className="text-sm">{m.message}</div>
+                      <div className="text-sm">{m.message || '[Empty message]'}</div>
                       {m.timestamp && (
                         <div className={`text-xs mt-1 ${m.name === name ? 'text-blue-200' : 'text-gray-400'}`}>
                           {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -492,7 +494,7 @@ export default function Room({ params }: { params: { code: string } }) {
                     </div>
                   </div>
                 </div>
-              ))
+              )})
             )}
           </div>
           
