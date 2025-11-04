@@ -23,6 +23,7 @@ export default function Room({ params }: { params: { code: string } }) {
   const [isClient, setIsClient] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [currentSpinResult, setCurrentSpinResult] = useState<string>("");
+  const subscriptionStartTime = useRef<Date | null>(null);
 
   // Wheel options - make them manageable
   const [wheelOptions, setWheelOptions] = useState([
@@ -72,6 +73,9 @@ export default function Room({ params }: { params: { code: string } }) {
           .eq('code', roomCode);
       }
 
+      // Mark the subscription start time - ignore events older than this
+      subscriptionStartTime.current = new Date();
+
       // Subscribe to room updates
       channel = supabase
         .channel(`room:${roomCode}`)
@@ -109,6 +113,13 @@ export default function Room({ params }: { params: { code: string } }) {
           (payload: any) => {
             console.log('💬 New chat message received:', payload);
             if (payload.new) {
+              // Ignore messages that happened before subscription started
+              const messageTime = new Date(payload.new.created_at);
+              if (subscriptionStartTime.current && messageTime < subscriptionStartTime.current) {
+                console.log('⏭️ Ignoring old chat message from before subscription');
+                return;
+              }
+              
               console.log('📨 Message data:', {
                 user: payload.new.user_name,
                 message: payload.new.message,
@@ -132,6 +143,17 @@ export default function Room({ params }: { params: { code: string } }) {
           (payload: any) => {
             console.log('New spin event received:', payload);
             if (payload.new) {
+              // Ignore events that happened before subscription started
+              const eventTime = new Date(payload.new.created_at);
+              if (subscriptionStartTime.current && eventTime < subscriptionStartTime.current) {
+                console.log('⏭️ Ignoring old spin event from before subscription:', {
+                  result: payload.new.result,
+                  eventTime: eventTime.toISOString(),
+                  subscriptionTime: subscriptionStartTime.current.toISOString()
+                });
+                return;
+              }
+              
               console.log('Starting spin with result:', payload.new.result);
               setCurrentSpinResult(payload.new.result);
               setIsSpinning(true);
