@@ -195,9 +195,9 @@ export default function SpinWheel({
     // Normalize rotation to 0-360 range
     const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
     
-    // Pointer is at top, drawing already rotated -90°,
-    // so we do NOT need to add +90° again.
-    const adjustedAngle = normalizedRotation;
+    // Account for the -90° canvas drawing offset
+    // Canvas draws segments rotated -90°, so we need to adjust our calculation
+    const adjustedAngle = (normalizedRotation + 90) % 360;
     
     // Find the segment that contains this angle
     const winningSegment = segments.find(seg => 
@@ -252,10 +252,7 @@ export default function SpinWheel({
     // Generate final rotation using your algorithm
     const extraSpins = 5; // number of full spins
     const randomOffset = Math.random() * (targetSegment.sliceAngle / 3); // small random variation within segment
-    
-    // Adjust for the -90° drawing offset (canvas draws with -90° shift)
-    const correctedTargetAngle = (targetAngle - 90 + 360) % 360;
-    const finalRotation = extraSpins * 360 + (360 - correctedTargetAngle) + randomOffset;
+    const finalRotation = extraSpins * 360 + (360 - targetAngle) + randomOffset;
     const newFinalRotation = rotation + finalRotation;
     
     setRotation(newFinalRotation)
