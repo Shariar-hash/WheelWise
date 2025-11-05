@@ -252,7 +252,10 @@ export default function SpinWheel({
     // Generate final rotation using your algorithm
     const extraSpins = 5; // number of full spins
     const randomOffset = Math.random() * (targetSegment.sliceAngle / 3); // small random variation within segment
-    const finalRotation = extraSpins * 360 + (360 - targetAngle) + randomOffset;
+    
+    // Adjust for the -90° drawing offset (canvas draws with -90° shift)
+    const correctedTargetAngle = (targetAngle - 90 + 360) % 360;
+    const finalRotation = extraSpins * 360 + (360 - correctedTargetAngle) + randomOffset;
     const newFinalRotation = rotation + finalRotation;
     
     setRotation(newFinalRotation)
