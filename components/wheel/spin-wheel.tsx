@@ -46,17 +46,27 @@ export default function SpinWheel({
 
   // Filter out empty options
   const validOptions = options.filter(option => option.label.trim() !== '')
-  // Calculate equal segments (ignore weights for now to fix alignment)
+  // Calculate segments respecting weights but with proper alignment
   const getSegments = () => {
-    const totalOptions = validOptions.length;
-    const segmentAngle = 360 / totalOptions;
+    // Create expanded array respecting weights
+    const expandedOptions: any[] = [];
+    validOptions.forEach((opt, originalIndex) => {
+      const weight = opt.weight || 1;
+      for (let i = 0; i < weight; i++) {
+        expandedOptions.push({ ...opt, originalIndex });
+      }
+    });
     
-    return validOptions.map((opt, index) => {
+    // Now divide equally among expanded options
+    const totalSegments = expandedOptions.length;
+    const segmentAngle = 360 / totalSegments;
+    
+    return expandedOptions.map((opt, index) => {
       const startAngle = index * segmentAngle;
       const endAngle = (index + 1) * segmentAngle;
       
       return { ...opt, index, startAngle, endAngle, sliceAngle: segmentAngle }
-    })
+    });
   }
 
   useEffect(() => {
@@ -146,17 +156,20 @@ export default function SpinWheel({
   const calculateWinningSegment = (finalRotationValue: number) => {
     if (validOptions.length === 0) return 0
     
-    // Use your algorithm: simple equal segments approach
-    const totalOptions = validOptions.length;
-    const segmentAngle = 360 / totalOptions;
+    // Get segments with weights
+    const segments = getSegments();
+    const totalSegments = segments.length;
+    const segmentAngle = 360 / totalSegments;
     
     // Normalize rotation to 0-360 range
     const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
     
     // Calculate which segment the pointer lands on (pointer at top)
-    const index = Math.floor((360 - normalizedRotation) / segmentAngle) % totalOptions;
+    const segmentIndex = Math.floor((360 - normalizedRotation) / segmentAngle) % totalSegments;
     
-    return index;
+    // Get the winning segment and find its original option index
+    const winningSegment = segments[segmentIndex];
+    return winningSegment ? winningSegment.originalIndex : 0;
   }
 
   const handleSpin = (resultValue: number) => {
@@ -185,15 +198,20 @@ export default function SpinWheel({
       }
     }
     
-    // Use your algorithm: simple equal segments approach
-    const totalOptions = validOptions.length;
-    const segmentAngle = 360 / totalOptions;
+    // Get segments with weights respected
+    const segments = getSegments();
     
-    // Find the index of the selected option
-    const selectedIndex = validOptions.findIndex(opt => opt.label === selectedOption.label)
+    // Find all segments that match the selected option (there might be multiple due to weights)
+    const matchingSegments = segments.filter(seg => seg.label === selectedOption.label);
     
-    // Calculate target angle using your algorithm
-    const targetAngle = selectedIndex * segmentAngle;
+    // Pick a random matching segment for visual variety
+    const targetSegment = matchingSegments[Math.floor(Math.random() * matchingSegments.length)];
+    const targetSegmentIndex = segments.findIndex(seg => seg === targetSegment);
+    
+    // Calculate target angle using equal segment approach
+    const totalSegments = segments.length;
+    const segmentAngle = 360 / totalSegments;
+    const targetAngle = targetSegmentIndex * segmentAngle;
     
     // Generate final rotation using your algorithm
     const extraSpins = 5; // number of full spins

@@ -318,6 +318,7 @@ export default function SpinPage() {
                     playSpinSound()
                   }
                 }}
+                onWheelClick={handleSpin}
               />
             </div>
 
