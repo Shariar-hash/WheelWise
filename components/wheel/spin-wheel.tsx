@@ -191,16 +191,19 @@ export default function SpinWheel({
     
     // Get all segments for proper mapping
     const segments = getSegments();
-    const totalSegments = segments.length;
-    const segmentAngle = 360 / totalSegments;
     
-    // Apply rotation offset to align pointer with result
-    const pointerOffset = -90; // Try -90° offset (opposite direction)
-    const normalized = (finalRotationValue + pointerOffset) % 360;
-    const resultIndex = Math.floor((360 - normalized) / segmentAngle) % totalSegments;
+    // Normalize rotation to 0-360 range
+    const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
     
-    // Map back to original option index
-    const winningSegment = segments[resultIndex];
+    // The pointer is at the top. Find which segment is under it.
+    // Since canvas draws with -90° offset, we need to account for that
+    const adjustedAngle = (normalizedRotation + 90) % 360;
+    
+    // Find the segment that contains this angle
+    const winningSegment = segments.find(seg => 
+      adjustedAngle >= seg.startAngle && adjustedAngle < seg.endAngle
+    ) || segments[segments.length - 1]; // fallback to last segment
+    
     return winningSegment ? winningSegment.originalIndex : 0;
   }
 
