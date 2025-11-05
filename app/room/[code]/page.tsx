@@ -204,8 +204,9 @@ export default function Room({ params }: { params: { code: string } }) {
               setIsSpinning(true);
               setTargetResult(currentRoom.current_result); // This ensures same result
               setResult(''); // Clear previous result
+              // Only show toast for non-owner
               if (!isOwner) {
-                toast.success(`🎡 ${currentRoom.room_owner} is spinning the wheel!`);
+                toast(`🎡 Spinning...`);
               }
             } else if (currentRoom.is_spinning && wasSpinning) {
               // Still spinning - make sure targetResult stays set
@@ -217,7 +218,7 @@ export default function Room({ params }: { params: { code: string } }) {
               setIsSpinning(false);
               setResult(currentRoom.current_result);
               setTargetResult(null);
-              toast.success(`🎯 Result: ${currentRoom.current_result}`);
+              // No toast here - result is shown in UI
             } else {
               // No spin in progress
               setIsSpinning(false);
@@ -225,14 +226,12 @@ export default function Room({ params }: { params: { code: string } }) {
               setTargetResult(null);
             }
             
-            // Show participant changes
+            // Show participant changes (only log, no toast spam)
             if (newParticipantCount !== oldParticipantCount && oldParticipantCount > 0) {
               if (newParticipantCount > oldParticipantCount) {
                 console.log(`👤 Participant joined: ${oldParticipantCount} → ${newParticipantCount}`);
-                toast.success(`🟢 ${newParticipantCount} ${newParticipantCount === 1 ? 'participant' : 'participants'} online`);
               } else {
                 console.log(`👤 Participant left: ${oldParticipantCount} → ${newParticipantCount}`);
-                toast(`🟡 ${newParticipantCount} ${newParticipantCount === 1 ? 'participant' : 'participants'} online`);
               }
             }
             

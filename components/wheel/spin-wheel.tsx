@@ -227,7 +227,6 @@ export default function SpinWheel({
       const targetOption = validOptions.find(opt => opt.label === targetResult)
       if (targetOption) {
         selectedOption = targetOption
-        console.log('🎯 Using target result from server:', targetResult);
       }
     }
     
@@ -244,14 +243,16 @@ export default function SpinWheel({
     const targetAngle = segmentCenter;
     
     // CRITICAL: EXACT same animation for ALL participants
-    // Calculate absolute final position (not relative to current rotation)
+    // Normalize current rotation to 0-360 range
+    const currentNormalized = rotation % 360;
+    
+    // Calculate how much to rotate to reach target
     const extraSpins = 5; // 5 full rotations for smooth animation
+    const targetRotation = 360 - targetAngle; // Where we want to end up (0-360)
     
-    // Calculate the exact final rotation that points to the target
-    // This is ABSOLUTE - everyone ends at the same angle
-    const absoluteFinalRotation = extraSpins * 360 + (360 - targetAngle);
-    
-    console.log(`🎯 ALL participants spinning to EXACT angle: ${absoluteFinalRotation}° → Result: "${selectedOption.label}"`);
+    // Calculate absolute final rotation (current + full spins + difference to target)
+    const rotationNeeded = extraSpins * 360 + (targetRotation - currentNormalized + 360) % 360;
+    const absoluteFinalRotation = rotation + rotationNeeded;
     
     // Set the target rotation
     setRotation(absoluteFinalRotation)
@@ -264,7 +265,6 @@ export default function SpinWheel({
       
       // Use the selectedOption (which includes targetResult from server)
       // This ensures the result matches what was pre-determined
-      console.log(`🎯 Wheel spin complete - Result: "${selectedOption.label}"`);
       
       if (onSpinComplete && selectedOption) {
         onSpinComplete({
@@ -286,16 +286,9 @@ export default function SpinWheel({
 
   useEffect(() => {
     if (spinning && !isSpinning) {
-      // Reset wheel to 0 before spinning for consistent sync
-      console.log('🔄 Resetting wheel to 0° before spin');
-      setRotation(0);
-      setFinalRotation(0);
-      
-      // Small delay to ensure reset is applied
-      setTimeout(() => {
-        const randomValue = Math.random()
-        handleSpin(randomValue)
-      }, 50);
+      // Don't reset - just trigger spin
+      const randomValue = Math.random()
+      handleSpin(randomValue)
     }
   }, [spinning])
 
