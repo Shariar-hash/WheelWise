@@ -35,6 +35,27 @@ export default function Room({ params }: { params: { code: string } }) {
     setIsClient(true);
   }, []);
 
+  // Heartbeat to maintain participant presence  
+  useEffect(() => {
+    if (!connected || !roomCode || !name) return;
+
+    const heartbeat = setInterval(async () => {
+      try {
+        // Update participant's last seen timestamp
+        await supabase
+          .from('room_state')
+          .update({ 
+            updated_at: new Date().toISOString()
+          })
+          .eq('room_code', roomCode);
+      } catch (error) {
+        console.error('Heartbeat failed:', error);
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(heartbeat);
+  }, [connected, roomCode, name]);
+
   // Initialize room and set up Supabase subscriptions
   useEffect(() => {
     if (!isClient || !roomCode) return;
@@ -125,54 +146,83 @@ export default function Room({ params }: { params: { code: string } }) {
     };
 
     const setupSubscriptions = () => {
-      // Subscribe to room state changes
+      console.log('Setting up Supabase subscriptions for room:', roomCode);
+      
+      // Single channel for all room updates to avoid conflicts
       roomStateChannel = supabase
-        .channel(`room_state_${roomCode}`)
+        .channel(`room_${roomCode}_${Date.now()}`) // Unique channel name
         .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'room_state', filter: `room_code=eq.${roomCode}` },
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'room_state', 
+            filter: `room_code=eq.${roomCode}` 
+          },
           (payload) => {
-            console.log('Room state changed:', payload);
+            console.log('🔄 Room state update received:', payload.eventType, payload.new);
             const newState = payload.new as RoomState;
-            if (newState) {
+            if (newState && newState.room_code === roomCode) {
               setRoomState(newState);
-              setParticipants(newState.participants);
-              setWheelOptions(newState.wheel_options);
-              setIsSpinning(newState.is_spinning);
+              setParticipants(newState.participants || []);
+              setWheelOptions(newState.wheel_options || []);
+              setIsSpinning(newState.is_spinning || false);
               setResult(newState.current_result || '');
               
-              if (newState.current_result && !newState.is_spinning) {
+              // Handle spin synchronization
+              if (newState.is_spinning && !isSpinning) {
+                console.log('🎡 Spin started - syncing to participants');
                 setTargetResult(newState.current_result);
+              } else if (!newState.is_spinning && newState.current_result) {
+                console.log('🎯 Spin completed with result:', newState.current_result);
+                setTargetResult(null);
               }
+              
+              toast.success('Room updated!');
             }
           }
         )
-        .subscribe();
-
-      // Subscribe to chat messages
-      chatChannel = supabase
-        .channel(`chat_${roomCode}`)
         .on('postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_code=eq.${roomCode}` },
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'chat_messages', 
+            filter: `room_code=eq.${roomCode}` 
+          },
           (payload) => {
+            console.log('💬 New chat message:', payload.new);
             const newMessage = payload.new as ChatMessage;
-            setMessages(prev => [...prev, newMessage]);
+            if (newMessage.sender_name !== name) { // Don't duplicate own messages
+              setMessages(prev => [...prev, newMessage]);
+            }
           }
         )
-        .subscribe();
-
-      // Subscribe to spin events
-      spinChannel = supabase
-        .channel(`spin_${roomCode}`)
         .on('postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'spin_events', filter: `room_code=eq.${roomCode}` },
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'spin_events', 
+            filter: `room_code=eq.${roomCode}` 
+          },
           (payload) => {
+            console.log('🎲 Spin event received:', payload.new);
             const spinEvent = payload.new as SpinEvent;
-            console.log('Spin event received:', spinEvent);
-            setTargetResult(spinEvent.result);
-            setIsSpinning(true);
+            if (spinEvent.spun_by !== name) { // Only sync if not the spinner
+              console.log('🔄 Syncing spin to participant');
+              setTargetResult(spinEvent.result);
+              setIsSpinning(true);
+            }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('📡 Subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Successfully subscribed to room updates');
+            setConnected(true);
+          } else if (status === 'CLOSED') {
+            console.log('❌ Subscription closed');
+            setConnected(false);
+          }
+        });
     };
 
     initializeRoom().then(() => {
@@ -181,14 +231,10 @@ export default function Room({ params }: { params: { code: string } }) {
 
     // Cleanup function
     return () => {
+      console.log('🧹 Cleaning up subscriptions');
       if (roomStateChannel) {
         supabase.removeChannel(roomStateChannel);
-      }
-      if (chatChannel) {
-        supabase.removeChannel(chatChannel);
-      }
-      if (spinChannel) {
-        supabase.removeChannel(spinChannel);
+        roomStateChannel = null;
       }
     };
   }, [roomCode, name, isOwner, isClient]);
@@ -196,39 +242,60 @@ export default function Room({ params }: { params: { code: string } }) {
   const sendMessage = async () => {
     if (!chat.trim() || !connected) return;
     
+    const messageToSend = chat.trim();
+    setChat(""); // Clear input immediately for better UX
+    
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('chat_messages')
         .insert({
           room_code: roomCode,
           sender_name: name,
-          message: chat.trim()
-        });
+          message: messageToSend
+        })
+        .select()
+        .single();
 
       if (error) throw error;
-      setChat("");
+      
+      // Add message to local state immediately (before real-time sync)
+      if (data) {
+        setMessages(prev => [...prev, data]);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
+      setChat(messageToSend); // Restore message if failed
     }
   };
 
   const updateWheelOptions = async (options: any[]) => {
-    if (!isOwner || !connected) return;
+    if (!isOwner || !connected) {
+      toast.error('Only the room owner can modify wheel options');
+      return;
+    }
     
     try {
-      const { error } = await supabase
+      console.log('🔧 Owner updating wheel options:', options);
+      
+      const { data, error } = await supabase
         .from('room_state')
         .update({ 
           wheel_options: options,
           updated_at: new Date().toISOString()
         })
-        .eq('room_code', roomCode);
+        .eq('room_code', roomCode)
+        .eq('room_owner', name) // Extra security check
+        .select()
+        .single();
 
       if (error) throw error;
       
-      setWheelOptions(options);
-      toast.success('Wheel options updated!');
+      if (data) {
+        console.log('✅ Wheel options updated successfully');
+        // Don't update local state here - let the subscription handle it
+        toast.success('Wheel options updated for all participants!');
+      }
     } catch (error) {
       console.error('Error updating wheel options:', error);
       toast.error('Failed to update wheel options');
@@ -236,9 +303,30 @@ export default function Room({ params }: { params: { code: string } }) {
   };
 
   const spinWheel = async () => {
-    if (!connected || !isOwner || isSpinning || wheelOptions.length === 0) return;
+    // Enhanced permission and state checks
+    if (!connected) {
+      toast.error('Not connected to room');
+      return;
+    }
+    
+    if (!isOwner || roomOwner !== name) {
+      toast.error('Only the room owner can spin the wheel');
+      return;
+    }
+    
+    if (isSpinning) {
+      toast.error('Wheel is already spinning');
+      return;
+    }
+    
+    if (wheelOptions.length === 0) {
+      toast.error('Add some wheel options first');
+      return;
+    }
 
     try {
+      console.log('🎡 Room owner starting spin...');
+      
       // Weight-based random selection
       const totalWeight = wheelOptions.reduce((sum, opt) => sum + ((opt.count || 1) * (opt.weight || 1)), 0);
       let random = Math.random() * totalWeight;
@@ -253,19 +341,22 @@ export default function Room({ params }: { params: { code: string } }) {
         }
       }
 
-      // Update room state to start spinning
+      console.log('🎯 Selected result:', selectedOption.label);
+
+      // Step 1: Update room state to start spinning (syncs to all participants)
       const { error: roomError } = await supabase
         .from('room_state')
         .update({ 
           is_spinning: true,
-          current_result: null,
+          current_result: selectedOption.label, // Pre-set the result for synchronization
           updated_at: new Date().toISOString()
         })
-        .eq('room_code', roomCode);
+        .eq('room_code', roomCode)
+        .eq('room_owner', name); // Extra security
 
       if (roomError) throw roomError;
 
-      // Create spin event for synchronization
+      // Step 2: Create spin event for participant synchronization
       const { error: spinError } = await supabase
         .from('spin_events')
         .insert({
@@ -276,25 +367,34 @@ export default function Room({ params }: { params: { code: string } }) {
 
       if (spinError) throw spinError;
 
-      // After 4 seconds, set the final result
-      setTimeout(async () => {
-        const { error: resultError } = await supabase
-          .from('room_state')
-          .update({ 
-            is_spinning: false,
-            current_result: selectedOption.label,
-            updated_at: new Date().toISOString()
-          })
-          .eq('room_code', roomCode);
+      console.log('✅ Spin synchronized to all participants');
+      toast.success('Wheel spinning for all participants!');
 
-        if (resultError) {
-          console.error('Error setting result:', resultError);
+      // Step 3: After 4 seconds, mark spinning as complete
+      setTimeout(async () => {
+        try {
+          const { error: resultError } = await supabase
+            .from('room_state')
+            .update({ 
+              is_spinning: false,
+              updated_at: new Date().toISOString()
+              // Keep current_result as is
+            })
+            .eq('room_code', roomCode);
+
+          if (resultError) {
+            console.error('Error finishing spin:', resultError);
+          } else {
+            console.log('🏁 Spin completed for all participants');
+          }
+        } catch (error) {
+          console.error('Error in spin completion:', error);
         }
       }, 4000);
 
     } catch (error) {
       console.error('Error spinning wheel:', error);
-      toast.error('Failed to spin wheel');
+      toast.error('Failed to spin wheel - please try again');
     }
   };
 
