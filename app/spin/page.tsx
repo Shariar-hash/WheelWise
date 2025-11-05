@@ -5,7 +5,7 @@ import { Plus, Trash2, RotateCcw, Volume2, VolumeX, Settings, Mail, Copy, Downlo
 import SpinWheel from '@/components/wheel/spin-wheel'
 import toast from 'react-hot-toast'
 
-// Default wheel has YES/NO in alternating pattern
+// Default wheel has YES/NO with 3 segments each
 const createDefaultWheel = () => [
   { label: 'YES', color: '#22c55e', weight: 1, count: 3 },
   { label: 'NO', color: '#ef4444', weight: 1, count: 3 },
@@ -160,23 +160,26 @@ export default function SpinPage() {
     oscillator.stop(audioContext.currentTime + 4)
   }
 
-  // Simple options for wheel display - just return the options as is
+  // Create expanded options that respect count and weight
   const getExpandedOptions = () => {
     // Filter out empty options first
     const validOptions = options.filter(opt => opt.label.trim() !== '')
     
-    // If no valid options, show default YES/NO
+    // If no valid options, show default YES/NO with counts
     if (validOptions.length === 0) {
       return createDefaultWheel().map((opt, i) => ({
         ...opt,
         id: `default-${i}`,
+        count: opt.count || 3, // Default YES/NO should have 3 each
       }))
     }
     
-    // Return simple options with IDs
+    // Return options with proper count and weight
     return validOptions.map((opt, i) => ({
       ...opt,
       id: `opt-${i}`,
+      count: opt.count || 1,
+      weight: opt.weight || 1,
     }))
   }
 

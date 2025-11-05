@@ -46,18 +46,36 @@ export default function SpinWheel({
 
   // Filter out empty options and fix segment counting
   const validOptions = options.filter(option => option.label.trim() !== '')
-  // Simple equal segments based on options count
+  // Create segments based on count and weight
   const getSegments = () => {
-    const totalOptions = validOptions.length;
-    const segmentAngle = 360 / totalOptions;
+    const allSegments: any[] = [];
     
-    return validOptions.map((opt, index) => {
-      const startAngle = index * segmentAngle;
-      const endAngle = (index + 1) * segmentAngle;
+    // Create multiple segments per option based on count
+    validOptions.forEach((opt, originalIndex) => {
+      const segmentCount = opt.count || 1;
+      for (let i = 0; i < segmentCount; i++) {
+        allSegments.push({
+          ...opt,
+          originalIndex,
+          segmentId: `${originalIndex}-${i}`,
+          weight: opt.weight || 1
+        });
+      }
+    });
+    
+    // Calculate total weight for proportional sizing
+    const totalWeight = allSegments.reduce((sum, seg) => sum + seg.weight, 0);
+    
+    // Assign angles based on weight
+    let currentAngle = 0;
+    return allSegments.map((segment) => {
+      const segmentAngle = (segment.weight / totalWeight) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + segmentAngle;
+      currentAngle = endAngle;
       
       return {
-        ...opt,
-        index,
+        ...segment,
         startAngle,
         endAngle,
         sliceAngle: segmentAngle
@@ -152,16 +170,20 @@ export default function SpinWheel({
   const calculateWinningSegment = (finalRotationValue: number) => {
     if (validOptions.length === 0) return 0
     
-    const totalOptions = validOptions.length;
-    const segmentAngle = 360 / totalOptions;
+    const segments = getSegments();
     
     // Normalize angle between 0–360
     const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
     
     // Calculate which segment the pointer lands on (pointer at top)
-    const index = Math.floor((360 - normalizedRotation) / segmentAngle) % totalOptions;
+    const pointerAngle = (360 - normalizedRotation) % 360;
     
-    return index;
+    // Find the segment that contains this angle
+    const winningSegment = segments.find(seg => 
+      pointerAngle >= seg.startAngle && pointerAngle < seg.endAngle
+    ) || segments[segments.length - 1];
+    
+    return winningSegment ? winningSegment.originalIndex : 0;
   }
 
   const handleSpin = (resultValue: number) => {
@@ -169,23 +191,44 @@ export default function SpinWheel({
 
     setIsSpinning(true)
 
-    const totalOptions = validOptions.length;
-    const segmentAngle = 360 / totalOptions;
-
-    // Decide which option to stop at
-    const targetIndex = targetResult
-      ? validOptions.findIndex(opt => opt.label === targetResult)
-      : Math.floor(Math.random() * totalOptions);
-
-    // Use valid index if targetResult not found
-    const finalTargetIndex = targetIndex >= 0 ? targetIndex : Math.floor(Math.random() * totalOptions);
-
-    // Calculate the angle for that option
-    const targetAngle = finalTargetIndex * segmentAngle;
-
-    // Add multiple full rotations for animation
-    const extraSpins = 5; // number of full spins
-    const finalRotation = extraSpins * 360 + (360 - targetAngle) + Math.random() * (segmentAngle / 3);
+    // Weight-based random selection
+    const totalWeight = validOptions.reduce((sum, opt) => {
+      return sum + (opt.count || 1) * (opt.weight || 1);
+    }, 0);
+    
+    let random = Math.random() * totalWeight;
+    let selectedOption = validOptions[0];
+    
+    for (const option of validOptions) {
+      const optionWeight = (option.count || 1) * (option.weight || 1);
+      random -= optionWeight;
+      if (random <= 0) {
+        selectedOption = option;
+        break;
+      }
+    }
+    
+    // If targetResult is provided, use it instead
+    if (targetResult) {
+      const targetOption = validOptions.find(opt => opt.label === targetResult)
+      if (targetOption) {
+        selectedOption = targetOption
+      }
+    }
+    
+    // Get all segments and find matching ones
+    const segments = getSegments();
+    const matchingSegments = segments.filter(seg => seg.label === selectedOption.label);
+    const targetSegment = matchingSegments[Math.floor(Math.random() * matchingSegments.length)];
+    
+    // Calculate target angle
+    const segmentCenter = (targetSegment.startAngle + targetSegment.endAngle) / 2;
+    const targetAngle = segmentCenter;
+    
+    // Add rotations for animation
+    const extraSpins = 5;
+    const randomOffset = Math.random() * (targetSegment.sliceAngle / 3);
+    const finalRotation = extraSpins * 360 + (360 - targetAngle) + randomOffset;
 
     const newFinalRotation = rotation + finalRotation;
     setRotation(newFinalRotation)
@@ -200,7 +243,8 @@ export default function SpinWheel({
       const resultIndex = calculateWinningSegment(newFinalRotation)
       const actualWinner = validOptions[resultIndex];
       
-      console.log(`🎯 Wheel result: The wheel stopped on "${actualWinner?.label}"`);
+      const matches = selectedOption.label === actualWinner?.label;
+      console.log(`🎯 Wheel result: Expected "${selectedOption.label}" → Got "${actualWinner?.label}" → ${matches ? '✅ MATCH' : '❌ MISMATCH'}`);
       
       if (onSpinComplete && actualWinner) {
         onSpinComplete({
