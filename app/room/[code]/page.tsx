@@ -56,6 +56,30 @@ export default function Room({ params }: { params: { code: string } }) {
     return () => clearInterval(heartbeat);
   }, [connected, roomCode, name]);
 
+  // Periodic connection check and fallback polling
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const connectionCheck = setInterval(async () => {
+      try {
+        const isConnected = await checkConnection();
+        if (!isConnected && connected) {
+          console.log('❌ Connection lost, attempting to reconnect...');
+          toast.error('Connection lost, refreshing room...');
+          await refreshRoomState();
+        } else if (!connected) {
+          // If realtime isn't working, poll for updates periodically
+          console.log('🔄 Polling for room updates...');
+          await refreshRoomState();
+        }
+      } catch (error) {
+        console.error('Connection check failed:', error);
+      }
+    }, connected ? 60000 : 10000); // Check every 10 seconds if not connected, 60 if connected
+
+    return () => clearInterval(connectionCheck);
+  }, [roomCode, connected]);
+
   // Initialize room and set up Supabase subscriptions
   useEffect(() => {
     if (!isClient || !roomCode) return;
@@ -66,41 +90,68 @@ export default function Room({ params }: { params: { code: string } }) {
 
     const initializeRoom = async () => {
       try {
+        console.log('🚀 Initializing room:', roomCode);
+        console.log('👤 User:', name, '| Owner:', isOwner);
         setConnected(true);
         
         // First, try to get existing room or create if owner
+        console.log('📡 Fetching room state from database...');
         const { data: existingRoom, error: fetchError } = await supabase
           .from('room_state')
           .select('*')
           .eq('room_code', roomCode)
           .single();
+        
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          // Error other than "not found"
+          console.error('❌ Database error:', fetchError);
+          throw new Error(`Database error: ${fetchError.message}`);
+        }
 
         if (existingRoom) {
           // Room exists, join it
-          const updatedParticipants = existingRoom.participants.includes(name) 
-            ? existingRoom.participants 
-            : [...existingRoom.participants, name];
+          console.log('📋 Existing room found, joining...');
+          const isAlreadyInRoom = existingRoom.participants.includes(name);
+          
+          if (!isAlreadyInRoom) {
+            // Add participant to room
+            const updatedParticipants = [...existingRoom.participants, name];
+            console.log(`👤 Adding participant: ${name}. Total will be: ${updatedParticipants.length}`);
 
-          const { data: updatedRoom, error: updateError } = await supabase
-            .from('room_state')
-            .update({ 
-              participants: updatedParticipants,
-              updated_at: new Date().toISOString()
-            })
-            .eq('room_code', roomCode)
-            .select()
-            .single();
+            const { data: updatedRoom, error: updateError } = await supabase
+              .from('room_state')
+              .update({ 
+                participants: updatedParticipants,
+                updated_at: new Date().toISOString()
+              })
+              .eq('room_code', roomCode)
+              .select()
+              .single();
 
-          if (updatedRoom) {
-            setRoomState(updatedRoom);
-            setParticipants(updatedRoom.participants);
-            setWheelOptions(updatedRoom.wheel_options);
-            setRoomOwner(updatedRoom.room_owner);
-            setIsSpinning(updatedRoom.is_spinning);
-            setResult(updatedRoom.current_result || '');
+            if (updatedRoom) {
+              console.log('✅ Successfully joined room:', updatedRoom);
+              setRoomState(updatedRoom);
+              setParticipants(updatedRoom.participants);
+              setWheelOptions(updatedRoom.wheel_options || wheelOptions);
+              setRoomOwner(updatedRoom.room_owner);
+              setIsSpinning(updatedRoom.is_spinning);
+              setResult(updatedRoom.current_result || '');
+              toast.success(`Joined room! ${updatedRoom.participants.length} participants online`);
+            }
+          } else {
+            // Already in room, just sync state
+            console.log('👤 Already in room, syncing state...');
+            setRoomState(existingRoom);
+            setParticipants(existingRoom.participants);
+            setWheelOptions(existingRoom.wheel_options || wheelOptions);
+            setRoomOwner(existingRoom.room_owner);
+            setIsSpinning(existingRoom.is_spinning);
+            setResult(existingRoom.current_result || '');
+            toast.success(`Welcome back! ${existingRoom.participants.length} participants online`);
           }
         } else if (isOwner) {
           // Create new room
+          console.log('🏗️ Creating new room...');
           const { data: newRoom, error: createError } = await supabase
             .from('room_state')
             .insert({
@@ -115,9 +166,11 @@ export default function Room({ params }: { params: { code: string } }) {
             .single();
 
           if (newRoom) {
+            console.log('✅ Room created successfully:', newRoom);
             setRoomState(newRoom);
             setParticipants([name]);
             setRoomOwner(name);
+            setWheelOptions(wheelOptions);
             toast.success('Room created successfully!');
           } else {
             throw new Error('Failed to create room');
@@ -162,22 +215,59 @@ export default function Room({ params }: { params: { code: string } }) {
             console.log('🔄 Room state update received:', payload.eventType, payload.new);
             const newState = payload.new as RoomState;
             if (newState && newState.room_code === roomCode) {
-              setRoomState(newState);
-              setParticipants(newState.participants || []);
-              setWheelOptions(newState.wheel_options || []);
-              setIsSpinning(newState.is_spinning || false);
-              setResult(newState.current_result || '');
+              const oldParticipantCount = participants.length;
+              const newParticipantCount = newState.participants?.length || 0;
               
-              // Handle spin synchronization
-              if (newState.is_spinning && !isSpinning) {
-                console.log('🎡 Spin started - syncing to participants');
+              console.log('📊 Updating local state with:', {
+                participants: `${oldParticipantCount} → ${newParticipantCount}`,
+                wheelOptions: newState.wheel_options?.length,
+                isSpinning: newState.is_spinning,
+                result: newState.current_result
+              });
+              
+              // Handle spin synchronization - CRITICAL for wheel visualization
+              const wasSpinning = isSpinning;
+              
+              if (newState.is_spinning && !wasSpinning) {
+                // Spin started
+                console.log('🎡 SPIN STARTED - Syncing visualization to this participant');
+                console.log('🎯 Target result for sync:', newState.current_result);
+                setIsSpinning(true);
                 setTargetResult(newState.current_result);
-              } else if (!newState.is_spinning && newState.current_result) {
-                console.log('🎯 Spin completed with result:', newState.current_result);
+                setResult(''); // Clear old result
+                toast.success('🎡 Wheel is spinning for everyone!');
+              } else if (!newState.is_spinning && wasSpinning && newState.current_result) {
+                // Spin completed
+                console.log('🎯 SPIN COMPLETED with result:', newState.current_result);
+                setIsSpinning(false);
+                setResult(newState.current_result);
                 setTargetResult(null);
+                toast.success(`🎯 Result: ${newState.current_result}`);
               }
               
-              toast.success('Room updated!');
+              // Update all state (after handling spin logic)
+              setRoomState(newState);
+              setParticipants(newState.participants || []);
+              setWheelOptions(newState.wheel_options || wheelOptions);
+              setRoomOwner(newState.room_owner);
+              
+              // Update spinning state if not handled above
+              if (newState.is_spinning === wasSpinning) {
+                setIsSpinning(newState.is_spinning || false);
+                setResult(newState.current_result || '');
+              }
+              
+              // Show participant count updates with specific changes
+              if (newParticipantCount !== oldParticipantCount) {
+                const countText = newParticipantCount === 1 ? '1 participant' : `${newParticipantCount} participants`;
+                if (newParticipantCount > oldParticipantCount) {
+                  console.log(`👤 Participant joined: ${oldParticipantCount} → ${newParticipantCount}`);
+                  toast.success(`🟢 ${countText} online (someone joined!)`);
+                } else {
+                  console.log(`👤 Participant left: ${oldParticipantCount} → ${newParticipantCount}`);
+                  toast(`🟡 ${countText} online (someone left)`);
+                }
+              }
             }
           }
         )
@@ -207,20 +297,31 @@ export default function Room({ params }: { params: { code: string } }) {
             console.log('🎲 Spin event received:', payload.new);
             const spinEvent = payload.new as SpinEvent;
             if (spinEvent.spun_by !== name) { // Only sync if not the spinner
-              console.log('🔄 Syncing spin to participant');
-              setTargetResult(spinEvent.result);
+              console.log('🔄 Syncing wheel visualization to this participant');
+              console.log('🎯 Target result:', spinEvent.result);
               setIsSpinning(true);
+              setTargetResult(spinEvent.result);
+              setResult(''); // Clear previous result
+              toast.success(`🎡 ${spinEvent.spun_by} is spinning the wheel for everyone!`);
+            } else {
+              console.log('✅ Spin event confirmed for spinner');
             }
           }
         )
-        .subscribe((status) => {
-          console.log('📡 Subscription status:', status);
+        .subscribe((status, error) => {
+          console.log('📡 Subscription status:', status, error);
           if (status === 'SUBSCRIBED') {
             console.log('✅ Successfully subscribed to room updates');
             setConnected(true);
+            toast.success('Real-time sync active');
           } else if (status === 'CLOSED') {
-            console.log('❌ Subscription closed');
+            console.log('❌ Subscription closed, falling back to polling');
             setConnected(false);
+            toast('⚠️ Using polling mode - refresh manually if needed');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Subscription error, falling back to polling:', error);
+            setConnected(false);
+            toast('⚠️ Real-time not available yet - use refresh button');
           }
         });
     };
@@ -238,6 +339,91 @@ export default function Room({ params }: { params: { code: string } }) {
       }
     };
   }, [roomCode, name, isOwner, isClient]);
+
+  // Handle participant leaving when window closes/navigates away
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (roomCode && name) {
+        try {
+          console.log('👋 Participant leaving room:', name);
+          // Get current room state
+          const { data: currentRoom } = await supabase
+            .from('room_state')
+            .select('participants')
+            .eq('room_code', roomCode)
+            .single();
+            
+          if (currentRoom) {
+            // Remove participant from room
+            const updatedParticipants = currentRoom.participants.filter((p: string) => p !== name);
+            await supabase
+              .from('room_state')
+              .update({ 
+                participants: updatedParticipants,
+                updated_at: new Date().toISOString()
+              })
+              .eq('room_code', roomCode);
+            console.log(`👋 ${name} removed from room. ${updatedParticipants.length} participants remain.`);
+          }
+        } catch (error) {
+          console.error('Error removing participant:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [roomCode, name]);
+
+  const refreshRoomState = async () => {
+    if (!roomCode) return;
+    
+    try {
+      console.log('🔄 Manually refreshing room state...');
+      toast.loading('Refreshing room...');
+      
+      const { data: currentRoom, error } = await supabase
+        .from('room_state')
+        .select('*')
+        .eq('room_code', roomCode)
+        .single();
+        
+      if (currentRoom && !error) {
+        console.log('✅ Room state refreshed:', currentRoom);
+        setRoomState(currentRoom);
+        setParticipants(currentRoom.participants || []);
+        setWheelOptions(currentRoom.wheel_options || wheelOptions);
+        setRoomOwner(currentRoom.room_owner);
+        setIsSpinning(currentRoom.is_spinning || false);
+        setResult(currentRoom.current_result || '');
+        toast.dismiss();
+        toast.success(`Room synced! ${currentRoom.participants.length} participants online`);
+      } else {
+        throw error || new Error('Room not found');
+      }
+    } catch (error) {
+      console.error('Error refreshing room state:', error);
+      toast.dismiss();
+      toast.error('Failed to refresh room state');
+    }
+  };
+
+  const checkConnection = async () => {
+    try {
+      const { error } = await supabase
+        .from('room_state')
+        .select('id')
+        .limit(1);
+      
+      if (!error) {
+        setConnected(true);
+        return true;
+      }
+    } catch {
+      setConnected(false);
+    }
+    return false;
+  };
 
   const sendMessage = async () => {
     if (!chat.trim() || !connected) return;
@@ -270,32 +456,33 @@ export default function Room({ params }: { params: { code: string } }) {
   };
 
   const updateWheelOptions = async (options: any[]) => {
-    if (!isOwner || !connected) {
-      toast.error('Only the room owner can modify wheel options');
+    if (!isOwner) {
+      toast.error('❌ Only the room owner can modify wheel options');
       return;
     }
     
     try {
-      console.log('🔧 Owner updating wheel options:', options);
+      console.log('🔧 Room owner updating wheel options:', options.length, 'options');
       
+      // Update local state immediately for instant feedback
+      setWheelOptions(options);
+      
+      // Sync to database (will trigger real-time update for all participants)
       const { data, error } = await supabase
         .from('room_state')
         .update({ 
           wheel_options: options,
           updated_at: new Date().toISOString()
         })
-        .eq('room_code', roomCode)
-        .eq('room_owner', name) // Extra security check
-        .select()
-        .single();
+        .eq('room_code', roomCode);
 
-      if (error) throw error;
-      
-      if (data) {
-        console.log('✅ Wheel options updated successfully');
-        // Don't update local state here - let the subscription handle it
-        toast.success('Wheel options updated for all participants!');
+      if (error) {
+        console.error('❌ Failed to update wheel options:', error);
+        throw error;
       }
+      
+      console.log(`✅ Wheel options synchronized to all ${participants.length} participants`);
+      toast.success(`✅ Options updated for all ${participants.length} participants!`);
     } catch (error) {
       console.error('Error updating wheel options:', error);
       toast.error('Failed to update wheel options');
@@ -303,13 +490,7 @@ export default function Room({ params }: { params: { code: string } }) {
   };
 
   const spinWheel = async () => {
-    // Enhanced permission and state checks
-    if (!connected) {
-      toast.error('Not connected to room');
-      return;
-    }
-    
-    if (!isOwner || roomOwner !== name) {
+    if (!isOwner) {
       toast.error('Only the room owner can spin the wheel');
       return;
     }
@@ -325,7 +506,8 @@ export default function Room({ params }: { params: { code: string } }) {
     }
 
     try {
-      console.log('🎡 Room owner starting spin...');
+      console.log('🎡 Room owner initiating wheel spin for all participants...');
+      toast.loading('Starting wheel spin...');
       
       // Weight-based random selection
       const totalWeight = wheelOptions.reduce((sum, opt) => sum + ((opt.count || 1) * (opt.weight || 1)), 0);
@@ -341,60 +523,92 @@ export default function Room({ params }: { params: { code: string } }) {
         }
       }
 
-      console.log('🎯 Selected result:', selectedOption.label);
+      console.log('🎯 Pre-determined result for all participants:', selectedOption.label);
+      console.log('📍 Room code:', roomCode);
+      console.log('👥 Total participants:', participants.length);
 
-      // Step 1: Update room state to start spinning (syncs to all participants)
-      const { error: roomError } = await supabase
+      // STEP 1: Set local spinning state immediately for owner's visualization
+      console.log('STEP 1: Setting local spinning state for owner');
+      setIsSpinning(true);
+      setTargetResult(selectedOption.label);
+      setResult(''); // Clear previous result
+
+      // STEP 2: Update room state to trigger spinning for all participants
+      console.log('STEP 2: Updating database - room_state table');
+      const { data: roomData, error: roomError } = await supabase
         .from('room_state')
         .update({ 
           is_spinning: true,
-          current_result: selectedOption.label, // Pre-set the result for synchronization
+          current_result: selectedOption.label,
           updated_at: new Date().toISOString()
         })
         .eq('room_code', roomCode)
-        .eq('room_owner', name); // Extra security
+        .select();
 
-      if (roomError) throw roomError;
+      if (roomError) {
+        console.error('❌ Failed to update room state:', roomError);
+        toast.dismiss();
+        toast.error('Failed to start spin - database error');
+        throw roomError;
+      }
+      
+      console.log('✅ Room state updated in database:', roomData);
 
-      // Step 2: Create spin event for participant synchronization
-      const { error: spinError } = await supabase
+      // STEP 3: Create spin event to notify all other participants
+      console.log('STEP 3: Creating spin_events entry');
+      const { data: spinData, error: spinError } = await supabase
         .from('spin_events')
         .insert({
           room_code: roomCode,
           result: selectedOption.label,
           spun_by: name
-        });
+        })
+        .select();
 
-      if (spinError) throw spinError;
+      if (spinError) {
+        console.error('❌ Failed to create spin event:', spinError);
+        toast.dismiss();
+        toast.error('Failed to sync spin event');
+        throw spinError;
+      }
+      
+      console.log('✅ Spin event created:', spinData);
 
-      console.log('✅ Spin synchronized to all participants');
-      toast.success('Wheel spinning for all participants!');
+      toast.dismiss();
+      console.log(`✅ Wheel spin synchronized to all ${participants.length} participants`);
+      console.log('🔔 Real-time subscriptions should now trigger on all clients');
+      toast.success(`🎡 Spinning for ${participants.length} ${participants.length === 1 ? 'participant' : 'participants'}!`);
 
-      // Step 3: After 4 seconds, mark spinning as complete
+      // STEP 4: After spin animation completes (4 seconds), mark as finished for all participants
       setTimeout(async () => {
         try {
+          console.log('⏱️ Spin animation complete, updating final state...');
           const { error: resultError } = await supabase
             .from('room_state')
             .update({ 
               is_spinning: false,
+              current_result: selectedOption.label, // Keep the result
               updated_at: new Date().toISOString()
-              // Keep current_result as is
             })
             .eq('room_code', roomCode);
 
           if (resultError) {
-            console.error('Error finishing spin:', resultError);
+            console.error('❌ Error finishing spin:', resultError);
           } else {
-            console.log('🏁 Spin completed for all participants');
+            console.log('✅ Spin completed and synchronized');
+            // Update local state
+            setIsSpinning(false);
+            setResult(selectedOption.label);
+            setTargetResult(null);
           }
         } catch (error) {
-          console.error('Error in spin completion:', error);
+          console.error('❌ Error in spin completion:', error);
         }
       }, 4000);
 
     } catch (error) {
       console.error('Error spinning wheel:', error);
-      toast.error('Failed to spin wheel - please try again');
+      toast.error('Failed to spin wheel');
     }
   };
 
@@ -431,6 +645,13 @@ export default function Room({ params }: { params: { code: string } }) {
               {connected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
+          <button
+            onClick={refreshRoomState}
+            className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 transition-colors"
+            title="Refresh room state"
+          >
+            🔄 Refresh
+          </button>
           {isOwner && (
             <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
               👑 Room Owner
@@ -441,7 +662,7 @@ export default function Room({ params }: { params: { code: string } }) {
         {/* Participants */}
         <div className="bg-gray-50 p-4 rounded-lg mb-6">
           <h3 className="font-semibold text-gray-800 mb-2">
-            Participants ({participants.length}):
+            🟢 {participants.length} {participants.length === 1 ? 'Participant' : 'Participants'} Online:
           </h3>
           <div className="flex flex-wrap gap-2">
             {participants.map((p, i) => (
@@ -462,10 +683,13 @@ export default function Room({ params }: { params: { code: string } }) {
           </div>
         </div>
 
-        {/* Wheel Options Management for Owner */}
+        {/* Wheel Options Management for Owner ONLY */}
         {isOwner && (
-          <div className="mb-6 bg-white border rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Manage Wheel Options</h3>
+          <div className="mb-6 bg-white border-2 border-yellow-300 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              👑 Manage Wheel Options <span className="text-xs text-yellow-600">(Owner Only)</span>
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">Add, remove, or modify wheel options. Changes sync to all participants.</p>
             <div className="space-y-2">
               {wheelOptions.map((option, index) => (
                 <div key={option.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
@@ -537,12 +761,31 @@ export default function Room({ params }: { params: { code: string } }) {
           </div>
         )}
 
+        {/* Current Wheel Options Display for Non-Owners */}
+        {!isOwner && wheelOptions.length > 0 && (
+          <div className="mb-6 bg-gray-50 border rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Current Wheel Options</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {wheelOptions.map((option, index) => (
+                <div key={option.id} className="flex items-center gap-2 p-2 bg-white rounded border">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: option.color }}></div>
+                  <span className="text-sm font-medium flex-1">{option.label}</span>
+                  <span className="text-xs text-gray-500">×{option.count || 1}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-3 text-center">
+              ⚠️ Only {roomOwner} (owner) can modify options
+            </p>
+          </div>
+        )}
+
         {/* Spin Wheel */}
         <div className="bg-white border rounded-lg p-6 mb-6 text-center">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Spin the Wheel!</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">🎡 Spin the Wheel!</h3>
           {!isOwner && (
-            <p className="text-sm text-gray-600 mb-3">
-              Only the room owner ({roomOwner}) can spin the wheel
+            <p className="text-sm text-orange-600 font-semibold mb-3 bg-orange-50 p-2 rounded">
+              👑 Only the room owner ({roomOwner}) can spin the wheel
             </p>
           )}
           
@@ -555,7 +798,10 @@ export default function Room({ params }: { params: { code: string } }) {
                 console.log('Wheel spin completed locally:', result);
                 setIsSpinning(false);
               }}
-              onWheelClick={isOwner ? spinWheel : undefined}
+              onWheelClick={isOwner ? spinWheel : () => {
+                toast.error('❌ Only the room owner can spin the wheel!');
+                console.log('🚫 Non-owner attempted to spin wheel');
+              }}
               spinDuration={4}
               theme={{
                 backgroundColor: '#1e293b',
