@@ -66,15 +66,19 @@ export default function SpinWheel({
       slicesByOption.push(optionSlices);
     });
     
-    // Simple consistent approach: if multiple segments, group them together
-    // This gives predictable behavior - segments for same option appear as neighbors
+    // Round-robin distribution for fairness - better randomization
     const distributedSlices: any[] = [];
+    const maxCount = Math.max(...slicesByOption.map(slices => slices.length));
     
-    // For each option, add all its slices consecutively
-    // This ensures segments of same option are always neighbors
-    slicesByOption.forEach(optionSlices => {
-      distributedSlices.push(...optionSlices);
-    });
+    // Round-robin: take one slice from each option in turn
+    // This spreads options evenly around the wheel for better fairness
+    for (let round = 0; round < maxCount; round++) {
+      slicesByOption.forEach(optionSlices => {
+        if (round < optionSlices.length) {
+          distributedSlices.push(optionSlices[round]);
+        }
+      });
+    }
     
     // Calculate total weighted size
     const totalWeightedSize = distributedSlices.reduce((sum, slice) => sum + slice.sliceWeight, 0);
