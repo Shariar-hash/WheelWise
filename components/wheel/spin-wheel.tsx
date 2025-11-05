@@ -42,7 +42,7 @@ export default function SpinWheel({
   const [rotation, setRotation] = useState(0)
   const [isSpinning, setIsSpinning] = useState(false)
   const [finalRotation, setFinalRotation
-
+    
   ] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 

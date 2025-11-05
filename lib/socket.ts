@@ -7,15 +7,12 @@ export const getSocket = (): Socket => {
     socket = io({
       path: '/api/socketio',
       addTrailingSlash: false,
-      transports: ['polling', 'websocket'], // Use polling first for Vercel
+      transports: ['websocket', 'polling'], // Try websocket first
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
       timeout: 20000,
       autoConnect: false, // Manual connection control
-      upgrade: true,
-      rememberUpgrade: true,
     })
   }
   return socket

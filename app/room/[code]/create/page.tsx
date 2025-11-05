@@ -21,7 +21,7 @@ interface WheelOption {
 export default function CreateWheelInRoomPage() {
   const params = useParams()
   const router = useRouter()
-  const roomCode = params?.code as string | undefined
+  const roomCode = params.code as string
   
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState('')
@@ -57,12 +57,6 @@ export default function CreateWheelInRoomPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!roomCode) {
-      toast.error('Invalid room code')
-      router.push('/room')
-      return
-    }
 
     if (options.some((opt) => !opt.label.trim())) {
       toast.error('All options must have a label')
@@ -118,7 +112,7 @@ export default function CreateWheelInRoomPage() {
 
       <h1 className="text-4xl font-bold text-white mb-2">Create Wheel in Room</h1>
       <p className="text-gray-400 mb-8">
-        This wheel will be visible to everyone in room <span className="font-mono font-bold text-white">{roomCode || 'Unknown'}</span>
+        This wheel will be visible to everyone in room <span className="font-mono font-bold text-white">{roomCode}</span>
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
