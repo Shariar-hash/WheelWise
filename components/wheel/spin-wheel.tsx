@@ -41,7 +41,9 @@ export default function SpinWheel({
 }: SpinWheelProps) {
   const [rotation, setRotation] = useState(0)
   const [isSpinning, setIsSpinning] = useState(false)
-  const [finalRotation, setFinalRotation] = useState(0)
+  const [finalRotation, setFinalRotation
+
+  ] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // Filter out empty options
@@ -187,20 +189,18 @@ export default function SpinWheel({
   const calculateWinningSegment = (finalRotationValue: number) => {
     if (validOptions.length === 0) return 0
     
-    // Get all segments (with weights and counts)
+    // Get all segments for proper mapping
     const segments = getSegments();
+    const totalSegments = segments.length;
+    const segmentAngle = 360 / totalSegments;
     
-    // Normalize rotation to 0-360 range  
-    const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
+    // Apply rotation offset to align pointer with result
+    const pointerOffset = 90; // Try 90° offset first, adjust if needed
+    const normalized = (finalRotationValue + pointerOffset) % 360;
+    const resultIndex = Math.floor((360 - normalized) / segmentAngle) % totalSegments;
     
-    // Find which segment the pointer lands on
-    const pointerAngle = (360 - normalizedRotation + 360) % 360;
-    
-    // Find the segment that contains this angle
-    const winningSegment = segments.find(seg => 
-      pointerAngle >= seg.startAngle && pointerAngle < seg.endAngle
-    ) || segments[segments.length - 1]; // fallback to last segment
-    
+    // Map back to original option index
+    const winningSegment = segments[resultIndex];
     return winningSegment ? winningSegment.originalIndex : 0;
   }
 
