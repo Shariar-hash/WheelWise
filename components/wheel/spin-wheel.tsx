@@ -46,26 +46,16 @@ export default function SpinWheel({
 
   // Filter out empty options
   const validOptions = options.filter(option => option.label.trim() !== '')
-  // Calculate segments respecting weights but with proper alignment
+  // Calculate visual segments (equal divisions) separate from weights (selection probability)
   const getSegments = () => {
-    // Create expanded array respecting weights
-    const expandedOptions: any[] = [];
-    validOptions.forEach((opt, originalIndex) => {
-      const weight = opt.weight || 1;
-      for (let i = 0; i < weight; i++) {
-        expandedOptions.push({ ...opt, originalIndex });
-      }
-    });
+    const totalOptions = validOptions.length;
+    const segmentAngle = 360 / totalOptions;
     
-    // Now divide equally among expanded options
-    const totalSegments = expandedOptions.length;
-    const segmentAngle = 360 / totalSegments;
-    
-    return expandedOptions.map((opt, index) => {
+    return validOptions.map((opt, index) => {
       const startAngle = index * segmentAngle;
       const endAngle = (index + 1) * segmentAngle;
       
-      return { ...opt, index, startAngle, endAngle, sliceAngle: segmentAngle }
+      return { ...opt, originalIndex: index, startAngle, endAngle, sliceAngle: segmentAngle }
     });
   }
 
@@ -156,20 +146,17 @@ export default function SpinWheel({
   const calculateWinningSegment = (finalRotationValue: number) => {
     if (validOptions.length === 0) return 0
     
-    // Get segments with weights
-    const segments = getSegments();
-    const totalSegments = segments.length;
-    const segmentAngle = 360 / totalSegments;
+    // Use visual segments (equal divisions, one per option)
+    const totalOptions = validOptions.length;
+    const segmentAngle = 360 / totalOptions;
     
     // Normalize rotation to 0-360 range
     const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
     
     // Calculate which segment the pointer lands on (pointer at top)
-    const segmentIndex = Math.floor((360 - normalizedRotation) / segmentAngle) % totalSegments;
+    const segmentIndex = Math.floor((360 - normalizedRotation) / segmentAngle) % totalOptions;
     
-    // Get the winning segment and find its original option index
-    const winningSegment = segments[segmentIndex];
-    return winningSegment ? winningSegment.originalIndex : 0;
+    return segmentIndex;
   }
 
   const handleSpin = (resultValue: number) => {
@@ -177,7 +164,7 @@ export default function SpinWheel({
 
     setIsSpinning(true)
 
-    // Weight-based random selection from options
+    // Weight-based random selection from options (affects probability, not visuals)
     const totalWeight = validOptions.reduce((sum, opt) => sum + (opt.weight || 1), 0)
     let random = Math.random() * totalWeight
     let selectedOption = validOptions[0]
@@ -198,15 +185,12 @@ export default function SpinWheel({
       }
     }
     
-    // Get segments with weights respected
+    // Get visual segments (equal divisions, one per option)
     const segments = getSegments();
     
-    // Find all segments that match the selected option (there might be multiple due to weights)
-    const matchingSegments = segments.filter(seg => seg.label === selectedOption.label);
-    
-    // Pick a random matching segment for visual variety
-    const targetSegment = matchingSegments[Math.floor(Math.random() * matchingSegments.length)];
-    const targetSegmentIndex = segments.findIndex(seg => seg === targetSegment);
+    // Find the visual segment for the selected option
+    const targetSegment = segments.find(seg => seg.label === selectedOption.label);
+    const targetSegmentIndex = targetSegment ? targetSegment.originalIndex : 0;
     
     // Calculate target angle using equal segment approach
     const totalSegments = segments.length;
