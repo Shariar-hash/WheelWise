@@ -195,9 +195,9 @@ export default function SpinWheel({
     // Normalize rotation to 0-360 range
     const normalizedRotation = ((finalRotationValue % 360) + 360) % 360;
     
-    // The pointer is at the top. Find which segment is under it.
-    // Since canvas draws with -90° offset, we need to account for that
-    const adjustedAngle = (normalizedRotation + 90) % 360;
+    // Pointer is at top, drawing already rotated -90°,
+    // so we do NOT need to add +90° again.
+    const adjustedAngle = normalizedRotation;
     
     // Find the segment that contains this angle
     const winningSegment = segments.find(seg => 
