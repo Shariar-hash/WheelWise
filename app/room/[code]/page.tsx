@@ -56,37 +56,11 @@ export default function Room({ params }: { params: { code: string } }) {
     return () => clearInterval(heartbeat);
   }, [connected, roomCode, name]);
 
-  // Periodic connection check and fallback polling
-  useEffect(() => {
-    if (!roomCode) return;
+  // No need for additional polling - already polling in main useEffect
 
-    const connectionCheck = setInterval(async () => {
-      try {
-        const isConnected = await checkConnection();
-        if (!isConnected && connected) {
-          console.log('❌ Connection lost, attempting to reconnect...');
-          toast.error('Connection lost, refreshing room...');
-          await refreshRoomState();
-        } else if (!connected) {
-          // If realtime isn't working, poll for updates periodically
-          console.log('🔄 Polling for room updates...');
-          await refreshRoomState();
-        }
-      } catch (error) {
-        console.error('Connection check failed:', error);
-      }
-    }, connected ? 60000 : 10000); // Check every 10 seconds if not connected, 60 if connected
-
-    return () => clearInterval(connectionCheck);
-  }, [roomCode, connected]);
-
-  // Initialize room and set up Supabase subscriptions
+  // Initialize room and set up polling (no realtime needed)
   useEffect(() => {
     if (!isClient || !roomCode) return;
-    
-    let roomStateChannel: any = null;
-    let chatChannel: any = null;
-    let spinChannel: any = null;
 
     const initializeRoom = async () => {
       try {
@@ -198,144 +172,104 @@ export default function Room({ params }: { params: { code: string } }) {
       }
     };
 
-    const setupSubscriptions = () => {
-      console.log('Setting up Supabase subscriptions for room:', roomCode);
+    const setupPolling = () => {
+      console.log('🔄 Setting up polling for room:', roomCode);
+      console.log('⚠️ Realtime not available - using polling every 2 seconds');
       
-      // Single channel for all room updates to avoid conflicts
-      roomStateChannel = supabase
-        .channel(`room_${roomCode}_${Date.now()}`) // Unique channel name
-        .on('postgres_changes',
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'room_state', 
-            filter: `room_code=eq.${roomCode}` 
-          },
-          (payload) => {
-            console.log('🔄 Room state update received:', payload.eventType, payload.new);
-            const newState = payload.new as RoomState;
-            if (newState && newState.room_code === roomCode) {
-              const oldParticipantCount = participants.length;
-              const newParticipantCount = newState.participants?.length || 0;
-              
-              console.log('📊 Updating local state with:', {
-                participants: `${oldParticipantCount} → ${newParticipantCount}`,
-                wheelOptions: newState.wheel_options?.length,
-                isSpinning: newState.is_spinning,
-                result: newState.current_result
-              });
-              
-              // Handle spin synchronization - CRITICAL for wheel visualization
-              const wasSpinning = isSpinning;
-              
-              if (newState.is_spinning && !wasSpinning) {
-                // Spin started
-                console.log('🎡 SPIN STARTED - Syncing visualization to this participant');
-                console.log('🎯 Target result for sync:', newState.current_result);
-                setIsSpinning(true);
-                setTargetResult(newState.current_result);
-                setResult(''); // Clear old result
-                toast.success('🎡 Wheel is spinning for everyone!');
-              } else if (!newState.is_spinning && wasSpinning && newState.current_result) {
-                // Spin completed
-                console.log('🎯 SPIN COMPLETED with result:', newState.current_result);
-                setIsSpinning(false);
-                setResult(newState.current_result);
-                setTargetResult(null);
-                toast.success(`🎯 Result: ${newState.current_result}`);
-              }
-              
-              // Update all state (after handling spin logic)
-              setRoomState(newState);
-              setParticipants(newState.participants || []);
-              setWheelOptions(newState.wheel_options || wheelOptions);
-              setRoomOwner(newState.room_owner);
-              
-              // Update spinning state if not handled above
-              if (newState.is_spinning === wasSpinning) {
-                setIsSpinning(newState.is_spinning || false);
-                setResult(newState.current_result || '');
-              }
-              
-              // Show participant count updates with specific changes
-              if (newParticipantCount !== oldParticipantCount) {
-                const countText = newParticipantCount === 1 ? '1 participant' : `${newParticipantCount} participants`;
-                if (newParticipantCount > oldParticipantCount) {
-                  console.log(`👤 Participant joined: ${oldParticipantCount} → ${newParticipantCount}`);
-                  toast.success(`🟢 ${countText} online (someone joined!)`);
-                } else {
-                  console.log(`👤 Participant left: ${oldParticipantCount} → ${newParticipantCount}`);
-                  toast(`🟡 ${countText} online (someone left)`);
-                }
-              }
-            }
-          }
-        )
-        .on('postgres_changes',
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'chat_messages', 
-            filter: `room_code=eq.${roomCode}` 
-          },
-          (payload) => {
-            console.log('💬 New chat message:', payload.new);
-            const newMessage = payload.new as ChatMessage;
-            if (newMessage.sender_name !== name) { // Don't duplicate own messages
-              setMessages(prev => [...prev, newMessage]);
-            }
-          }
-        )
-        .on('postgres_changes',
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'spin_events', 
-            filter: `room_code=eq.${roomCode}` 
-          },
-          (payload) => {
-            console.log('🎲 Spin event received:', payload.new);
-            const spinEvent = payload.new as SpinEvent;
-            if (spinEvent.spun_by !== name) { // Only sync if not the spinner
-              console.log('🔄 Syncing wheel visualization to this participant');
-              console.log('🎯 Target result:', spinEvent.result);
+      // Poll room state every 2 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const { data: currentRoom, error } = await supabase
+            .from('room_state')
+            .select('*')
+            .eq('room_code', roomCode)
+            .single();
+            
+          if (currentRoom && !error) {
+            const oldParticipantCount = participants.length;
+            const newParticipantCount = currentRoom.participants?.length || 0;
+            const wasSpinning = isSpinning;
+            
+            // Handle spin synchronization
+            if (currentRoom.is_spinning && !wasSpinning) {
+              console.log('🎡 SPIN STARTED - Syncing visualization');
+              console.log('🎯 Target result:', currentRoom.current_result);
               setIsSpinning(true);
-              setTargetResult(spinEvent.result);
-              setResult(''); // Clear previous result
-              toast.success(`🎡 ${spinEvent.spun_by} is spinning the wheel for everyone!`);
-            } else {
-              console.log('✅ Spin event confirmed for spinner');
+              setTargetResult(currentRoom.current_result);
+              setResult('');
+              toast.success('🎡 Wheel is spinning!');
+            } else if (!currentRoom.is_spinning && wasSpinning && currentRoom.current_result) {
+              console.log('🎯 SPIN COMPLETED:', currentRoom.current_result);
+              setIsSpinning(false);
+              setResult(currentRoom.current_result);
+              setTargetResult(null);
+              toast.success(`🎯 Result: ${currentRoom.current_result}`);
             }
-          }
-        )
-        .subscribe((status, error) => {
-          console.log('📡 Subscription status:', status, error);
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Successfully subscribed to room updates');
+            
+            // Update all state
+            setRoomState(currentRoom);
+            setParticipants(currentRoom.participants || []);
+            setWheelOptions(currentRoom.wheel_options || []);
+            setRoomOwner(currentRoom.room_owner);
+            
+            // Handle spinning state if not changed
+            if (currentRoom.is_spinning === wasSpinning) {
+              setIsSpinning(currentRoom.is_spinning || false);
+              setResult(currentRoom.current_result || '');
+            }
+            
+            // Show participant changes
+            if (newParticipantCount !== oldParticipantCount && oldParticipantCount > 0) {
+              if (newParticipantCount > oldParticipantCount) {
+                console.log(`👤 Participant joined: ${oldParticipantCount} → ${newParticipantCount}`);
+                toast.success(`🟢 ${newParticipantCount} ${newParticipantCount === 1 ? 'participant' : 'participants'} online`);
+              } else {
+                console.log(`👤 Participant left: ${oldParticipantCount} → ${newParticipantCount}`);
+                toast(`🟡 ${newParticipantCount} ${newParticipantCount === 1 ? 'participant' : 'participants'} online`);
+              }
+            }
+            
             setConnected(true);
-            toast.success('Real-time sync active');
-          } else if (status === 'CLOSED') {
-            console.log('❌ Subscription closed, falling back to polling');
-            setConnected(false);
-            toast('⚠️ Using polling mode - refresh manually if needed');
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ Subscription error, falling back to polling:', error);
-            setConnected(false);
-            toast('⚠️ Real-time not available yet - use refresh button');
           }
-        });
+        } catch (error) {
+          console.error('Polling error:', error);
+          setConnected(false);
+        }
+      }, 2000); // Poll every 2 seconds
+      
+      // Also poll chat messages
+      const pollChat = setInterval(async () => {
+        try {
+          const { data: chatMessages } = await supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('room_code', roomCode)
+            .order('created_at', { ascending: true })
+            .limit(50);
+            
+          if (chatMessages) {
+            setMessages(chatMessages);
+          }
+        } catch (error) {
+          console.error('Chat polling error:', error);
+        }
+      }, 3000); // Poll chat every 3 seconds
+      
+      return { pollInterval, pollChat };
     };
 
+    let pollIntervals: any = null;
+    
     initializeRoom().then(() => {
-      setupSubscriptions();
+      pollIntervals = setupPolling();
     });
 
     // Cleanup function
     return () => {
-      console.log('🧹 Cleaning up subscriptions');
-      if (roomStateChannel) {
-        supabase.removeChannel(roomStateChannel);
-        roomStateChannel = null;
+      console.log('🧹 Cleaning up polling intervals');
+      if (pollIntervals) {
+        clearInterval(pollIntervals.pollInterval);
+        clearInterval(pollIntervals.pollChat);
       }
     };
   }, [roomCode, name, isOwner, isClient]);
