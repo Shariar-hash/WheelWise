@@ -190,32 +190,39 @@ export default function Room({ params }: { params: { code: string } }) {
             const newParticipantCount = currentRoom.participants?.length || 0;
             const wasSpinning = isSpinning;
             
-            // Handle spin synchronization
-            if (currentRoom.is_spinning && !wasSpinning) {
-              console.log('🎡 SPIN STARTED - Syncing visualization');
-              console.log('🎯 Target result:', currentRoom.current_result);
-              setIsSpinning(true);
-              setTargetResult(currentRoom.current_result);
-              setResult('');
-              toast.success('🎡 Wheel is spinning!');
-            } else if (!currentRoom.is_spinning && wasSpinning && currentRoom.current_result) {
-              console.log('🎯 SPIN COMPLETED:', currentRoom.current_result);
-              setIsSpinning(false);
-              setResult(currentRoom.current_result);
-              setTargetResult(null);
-              toast.success(`🎯 Result: ${currentRoom.current_result}`);
-            }
-            
-            // Update all state
+            // Always update basic state first
             setRoomState(currentRoom);
             setParticipants(currentRoom.participants || []);
             setWheelOptions(currentRoom.wheel_options || []);
             setRoomOwner(currentRoom.room_owner);
             
-            // Handle spinning state if not changed
-            if (currentRoom.is_spinning === wasSpinning) {
-              setIsSpinning(currentRoom.is_spinning || false);
+            // Handle spin synchronization - CRITICAL for exact sync
+            if (currentRoom.is_spinning && !wasSpinning) {
+              // Spin just started - sync everyone to the SAME result
+              console.log('🎡 SPIN STARTED - Syncing to EXACT result for all participants');
+              console.log('🎯 Target result (same for everyone):', currentRoom.current_result);
+              setIsSpinning(true);
+              setTargetResult(currentRoom.current_result); // This ensures same result
+              setResult(''); // Clear previous result
+              if (!isOwner) {
+                toast.success(`🎡 ${currentRoom.room_owner} is spinning the wheel!`);
+              }
+            } else if (currentRoom.is_spinning && wasSpinning) {
+              // Still spinning - make sure targetResult stays set
+              setIsSpinning(true);
+              setTargetResult(currentRoom.current_result);
+            } else if (!currentRoom.is_spinning && wasSpinning && currentRoom.current_result) {
+              // Spin just completed
+              console.log('🎯 SPIN COMPLETED - Same result for everyone:', currentRoom.current_result);
+              setIsSpinning(false);
+              setResult(currentRoom.current_result);
+              setTargetResult(null);
+              toast.success(`🎯 Result: ${currentRoom.current_result}`);
+            } else {
+              // No spin in progress
+              setIsSpinning(false);
               setResult(currentRoom.current_result || '');
+              setTargetResult(null);
             }
             
             // Show participant changes
@@ -457,18 +464,13 @@ export default function Room({ params }: { params: { code: string } }) {
         }
       }
 
-      console.log('🎯 Pre-determined result for all participants:', selectedOption.label);
+      console.log('🎯 Pre-determined result (SAME FOR ALL):', selectedOption.label);
       console.log('📍 Room code:', roomCode);
       console.log('👥 Total participants:', participants.length);
 
-      // STEP 1: Set local spinning state immediately for owner's visualization
-      console.log('STEP 1: Setting local spinning state for owner');
-      setIsSpinning(true);
-      setTargetResult(selectedOption.label);
-      setResult(''); // Clear previous result
-
-      // STEP 2: Update room state to trigger spinning for all participants
-      console.log('STEP 2: Updating database - room_state table');
+      // STEP 1: Update database FIRST (polling will handle UI update)
+      // This ensures ALL participants (including owner) get the SAME result via polling
+      console.log('STEP 1: Updating database - room_state table');
       const { data: roomData, error: roomError } = await supabase
         .from('room_state')
         .update({ 
@@ -488,8 +490,8 @@ export default function Room({ params }: { params: { code: string } }) {
       
       console.log('✅ Room state updated in database:', roomData);
 
-      // STEP 3: Create spin event to notify all other participants
-      console.log('STEP 3: Creating spin_events entry');
+      // STEP 2: Create spin event for tracking
+      console.log('STEP 2: Creating spin_events entry');
       const { data: spinData, error: spinError } = await supabase
         .from('spin_events')
         .insert({
@@ -510,10 +512,13 @@ export default function Room({ params }: { params: { code: string } }) {
 
       toast.dismiss();
       console.log(`✅ Wheel spin synchronized to all ${participants.length} participants`);
-      console.log('🔔 Real-time subscriptions should now trigger on all clients');
-      toast.success(`🎡 Spinning for ${participants.length} ${participants.length === 1 ? 'participant' : 'participants'}!`);
+      console.log('🔔 Polling will sync the spin to all clients within 2 seconds');
+      console.log('⭐ ALL participants will see SAME result:', selectedOption.label);
+      toast.success(`🎡 Spinning for all ${participants.length} participants!`);
 
-      // STEP 4: After spin animation completes (4 seconds), mark as finished for all participants
+      // Note: Polling will update local state for owner too - ensures exact sync
+      
+      // STEP 3: After spin animation completes (4 seconds), mark as finished for all participants
       setTimeout(async () => {
         try {
           console.log('⏱️ Spin animation complete, updating final state...');
@@ -529,11 +534,10 @@ export default function Room({ params }: { params: { code: string } }) {
           if (resultError) {
             console.error('❌ Error finishing spin:', resultError);
           } else {
-            console.log('✅ Spin completed and synchronized');
-            // Update local state
-            setIsSpinning(false);
-            setResult(selectedOption.label);
-            setTargetResult(null);
+            console.log('✅ Spin completed and synchronized to database');
+            console.log('🔔 Polling will show final result to all participants');
+            // Note: Don't update local state here - let polling handle it
+            // This ensures ALL participants (including owner) get updated the same way
           }
         } catch (error) {
           console.error('❌ Error in spin completion:', error);

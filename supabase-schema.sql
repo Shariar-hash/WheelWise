@@ -51,6 +51,5 @@ create policy "Allow all operations on room_state" on room_state for all using (
 create policy "Allow all operations on chat_messages" on chat_messages for all using (true);
 create policy "Allow all operations on spin_events" on spin_events for all using (true);
 
--- Note: Enable Realtime manually in the Supabase dashboard for these tables:
--- 1. Go to Database > Replication 
--- 2. Enable realtime for: room_state, chat_messages, spin_events
+-- Note: This application uses polling-based sync (every 2 seconds)
+-- No realtime/replication features needed - works in all regions!
