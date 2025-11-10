@@ -260,6 +260,9 @@ export default function Room({ params }: { params: { code: string } }) {
             
           if (chatMessages) {
             console.log('💬 Fetched chat messages:', chatMessages.length);
+            if (chatMessages.length > 0) {
+              console.log('📨 Sample message data:', JSON.stringify(chatMessages[chatMessages.length - 1], null, 2));
+            }
             setMessages(chatMessages);
           }
         } catch (error) {
@@ -372,21 +375,33 @@ export default function Room({ params }: { params: { code: string } }) {
   };
 
   const sendMessage = async () => {
-    if (!chat.trim() || !connected) return;
+    if (!chat.trim() || !connected) {
+      console.log('⚠️ Cannot send message:', { chatEmpty: !chat.trim(), notConnected: !connected });
+      return;
+    }
     
     const messageToSend = chat.trim();
     setChat(""); // Clear input immediately for better UX
     
-    console.log('📤 Sending message:', { roomCode, name, message: messageToSend });
+    console.log('📤 Sending message:', { 
+      roomCode, 
+      name, 
+      message: messageToSend,
+      messageLength: messageToSend.length 
+    });
     
     try {
+      const insertData = {
+        room_code: roomCode,
+        sender_name: name,
+        message: messageToSend
+      };
+      
+      console.log('📝 Insert data:', JSON.stringify(insertData, null, 2));
+      
       const { data, error } = await supabase
         .from('chat_messages')
-        .insert({
-          room_code: roomCode,
-          sender_name: name,
-          message: messageToSend
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -395,7 +410,7 @@ export default function Room({ params }: { params: { code: string } }) {
         throw error;
       }
       
-      console.log('✅ Message sent successfully:', data);
+      console.log('✅ Message sent successfully:', JSON.stringify(data, null, 2));
       
       // Add message to local state immediately (before polling sync)
       if (data) {
@@ -825,15 +840,17 @@ export default function Room({ params }: { params: { code: string } }) {
                     <div className={`rounded-lg px-3 py-2 ${
                       m.sender_name === name 
                         ? 'bg-blue-500 text-white' 
-                        : 'bg-white border shadow-sm'
+                        : 'bg-white border shadow-sm text-gray-800'
                     }`}>
                       {m.sender_name !== name && (
                         <div className="text-xs font-semibold mb-1 text-gray-600">
                           {m.sender_name} {m.sender_name === roomOwner && '👑'}
                         </div>
                       )}
-                      <div className="text-sm">{m.message}</div>
-                      <div className={`text-xs mt-1 ${m.sender_name === name ? 'text-blue-200' : 'text-gray-400'}`}>
+                      <div className="text-sm break-words">
+                        {m.message}
+                      </div>
+                      <div className={`text-xs mt-1 ${m.sender_name === name ? 'text-blue-100' : 'text-gray-400'}`}>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
