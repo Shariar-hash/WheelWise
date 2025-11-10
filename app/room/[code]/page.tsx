@@ -246,14 +246,20 @@ export default function Room({ params }: { params: { code: string } }) {
       // Also poll chat messages
       const pollChat = setInterval(async () => {
         try {
-          const { data: chatMessages } = await supabase
+          const { data: chatMessages, error } = await supabase
             .from('chat_messages')
             .select('*')
             .eq('room_code', roomCode)
             .order('created_at', { ascending: true })
             .limit(50);
+          
+          if (error) {
+            console.error('Chat fetch error:', error);
+            return;
+          }
             
           if (chatMessages) {
+            console.log('💬 Fetched chat messages:', chatMessages.length);
             setMessages(chatMessages);
           }
         } catch (error) {
@@ -371,6 +377,8 @@ export default function Room({ params }: { params: { code: string } }) {
     const messageToSend = chat.trim();
     setChat(""); // Clear input immediately for better UX
     
+    console.log('📤 Sending message:', { roomCode, name, message: messageToSend });
+    
     try {
       const { data, error } = await supabase
         .from('chat_messages')
@@ -382,9 +390,14 @@ export default function Room({ params }: { params: { code: string } }) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Message insert error:', error);
+        throw error;
+      }
       
-      // Add message to local state immediately (before real-time sync)
+      console.log('✅ Message sent successfully:', data);
+      
+      // Add message to local state immediately (before polling sync)
       if (data) {
         setMessages(prev => [...prev, data]);
       }
@@ -550,7 +563,8 @@ export default function Room({ params }: { params: { code: string } }) {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       sendMessage();
     }
   };
