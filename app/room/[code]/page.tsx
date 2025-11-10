@@ -259,10 +259,6 @@ export default function Room({ params }: { params: { code: string } }) {
           }
             
           if (chatMessages) {
-            console.log('💬 Fetched chat messages:', chatMessages.length);
-            if (chatMessages.length > 0) {
-              console.log('📨 Sample message data:', JSON.stringify(chatMessages[chatMessages.length - 1], null, 2));
-            }
             setMessages(chatMessages);
           }
         } catch (error) {
@@ -375,42 +371,23 @@ export default function Room({ params }: { params: { code: string } }) {
   };
 
   const sendMessage = async () => {
-    if (!chat.trim() || !connected) {
-      console.log('⚠️ Cannot send message:', { chatEmpty: !chat.trim(), notConnected: !connected });
-      return;
-    }
+    if (!chat.trim() || !connected) return;
     
     const messageToSend = chat.trim();
     setChat(""); // Clear input immediately for better UX
     
-    console.log('📤 Sending message:', { 
-      roomCode, 
-      name, 
-      message: messageToSend,
-      messageLength: messageToSend.length 
-    });
-    
     try {
-      const insertData = {
-        room_code: roomCode,
-        sender_name: name,
-        message: messageToSend
-      };
-      
-      console.log('📝 Insert data:', JSON.stringify(insertData, null, 2));
-      
       const { data, error } = await supabase
         .from('chat_messages')
-        .insert(insertData)
+        .insert({
+          room_code: roomCode,
+          sender_name: name,
+          message: messageToSend
+        })
         .select()
         .single();
 
-      if (error) {
-        console.error('❌ Message insert error:', error);
-        throw error;
-      }
-      
-      console.log('✅ Message sent successfully:', JSON.stringify(data, null, 2));
+      if (error) throw error;
       
       // Add message to local state immediately (before polling sync)
       if (data) {
@@ -825,17 +802,6 @@ export default function Room({ params }: { params: { code: string } }) {
               messages.map((m, i) => {
                 const isMyMessage = m.sender_name === name;
                 const isOwnerMessage = m.sender_name === roomOwner;
-                
-                // Debug logging
-                console.log(`Message ${i}:`, {
-                  sender: m.sender_name,
-                  message: m.message,
-                  myName: name,
-                  roomOwner: roomOwner,
-                  isMyMessage,
-                  isOwnerMessage,
-                  messageLength: m.message?.length || 0
-                });
                 
                 return (
                 <div key={i} className={`mb-3 flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
