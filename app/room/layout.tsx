@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://wheel-wise-roan.vercel.app'
+
 export const metadata: Metadata = {
   title: 'Multiplayer Spin Rooms - Spin Wheels Together Live',
   description: 'Create or join live multiplayer spin rooms. Spin wheels together with friends in real-time. Perfect for group decisions, online raffles, and collaborative games. Free to use!',
@@ -19,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Multiplayer Spin Rooms - Spin Together Live',
     description: 'Create or join live multiplayer spin rooms and spin wheels together with friends in real-time!',
-    url: 'https://wheelwise.vercel.app/room',
+    url: `${siteUrl}/room`,
     images: ['/og-image.png'],
   },
   twitter: {
@@ -27,7 +29,7 @@ export const metadata: Metadata = {
     description: 'Spin wheels together with friends in real-time multiplayer rooms!',
   },
   alternates: {
-    canonical: 'https://wheelwise.vercel.app/room',
+    canonical: `${siteUrl}/room`,
   },
 }
 

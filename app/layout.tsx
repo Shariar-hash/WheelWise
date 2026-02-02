@@ -9,7 +9,8 @@ import Header from '@/components/layout/header'
 
 const inter = Inter({ subsets: ['latin'] })
 
-const siteUrl = 'https://wheelwise.vercel.app'
+// Use environment variable for the site URL
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://wheel-wise-roan.vercel.app'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -118,7 +119,7 @@ export default function RootLayout({
     name: 'WheelWise',
     alternateName: ['Wheel Wise', 'WheelWise Random Picker', 'WheelWise Spinner'],
     description: 'Free online random picker wheel and decision maker. Spin the wheel to pick random names, winners, or make decisions with provably fair results.',
-    url: 'https://wheelwise.vercel.app',
+    url: siteUrl,
     applicationCategory: 'UtilitiesApplication',
     operatingSystem: 'Any',
     offers: {

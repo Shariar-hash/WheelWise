@@ -1,5 +1,4 @@
 # WheelWise - Random Picker Wheel
-# https://wheelwise.vercel.app
 
 # Allow all search engines to index the site
 User-agent: *
@@ -19,5 +18,5 @@ Allow: /auth
 # Crawl-delay for respectful crawling
 Crawl-delay: 1
 
-# Sitemap location
-Sitemap: https://wheelwise.vercel.app/sitemap.xml
+# Sitemap - Update this URL to match your production domain
+# Sitemap: https://your-domain.com/sitemap.xml
