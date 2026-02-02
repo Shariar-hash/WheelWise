@@ -1,10 +1,23 @@
+# WheelWise - Random Picker Wheel
+# https://wheelwise.vercel.app
+
 # Allow all search engines to index the site
 User-agent: *
 Allow: /
+Allow: /spin
+Allow: /room
+Allow: /wheels
+Allow: /wheel/create
 
-# Disallow authentication and API routes
-Disallow: /auth/
+# Disallow API routes and callback routes
 Disallow: /api/
+Disallow: /auth/callback
+
+# Allow auth page for sign-in visibility
+Allow: /auth
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1
 
 # Sitemap location
 Sitemap: https://wheelwise.vercel.app/sitemap.xml

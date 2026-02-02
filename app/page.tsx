@@ -24,11 +24,11 @@ export default function HomePage() {
           </h1>
         </div>
         <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
-          The Smart and Fair Decision Wheel
+          Free Online Random Picker Wheel & Decision Maker
         </p>
         <p className="text-lg text-gray-400 max-w-2xl mx-auto">
-          Interactive, provably fair spin-wheel platform with multiplayer features, 
-          custom designs, and real-time collaboration.
+          Spin the wheel to pick random names, choose winners, or make decisions instantly. 
+          100% free, provably fair, with multiplayer rooms and custom wheel designs.
         </p>
         
         <div className="flex flex-wrap gap-4 justify-center pt-6">
@@ -110,16 +110,55 @@ export default function HomePage() {
 
       {/* CTA Section */}
       <section className="text-center space-y-6 py-12 bg-gradient-to-r from-purple-900/50 to-blue-900/50 rounded-2xl border border-purple-500/30">
-        <h2 className="text-4xl font-bold text-white">Ready to Spin?</h2>
+        <h2 className="text-4xl font-bold text-white">Ready to Spin the Wheel?</h2>
         <p className="text-xl text-gray-300">
-          Create your first wheel and experience the fun with friends in real-time!
+          Create your free random picker wheel and experience the fun with friends in real-time!
         </p>
         <Link 
-          href="/room"
+          href="/spin"
           className="inline-block px-10 py-5 bg-gradient-to-r from-neon-blue to-neon-purple rounded-lg text-white text-lg font-bold hover:shadow-2xl hover:scale-110 transition-all neon-border"
         >
-          Get Started - It&apos;s Free!
+          Spin the Wheel Now - It&apos;s Free!
         </Link>
+      </section>
+
+      {/* SEO Content Section */}
+      <section className="space-y-8 py-8">
+        <h2 className="text-3xl font-bold text-center text-white">What is WheelWise Random Picker?</h2>
+        <div className="grid md:grid-cols-2 gap-8 text-gray-300">
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white">Free Random Picker Wheel Online</h3>
+            <p>
+              WheelWise is a free online random picker wheel that helps you make decisions, pick random names, 
+              select winners for giveaways, and more. Our wheel spinner is completely free to use with no 
+              sign-up required. Simply add your options, spin the wheel, and let fate decide!
+            </p>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white">Provably Fair & Transparent</h3>
+            <p>
+              Unlike other random pickers, WheelWise uses a provably fair algorithm that ensures every spin 
+              is truly random and verifiable. Our commit-reveal system means you can verify that results 
+              weren&apos;t manipulated - perfect for raffles, contests, and fair decision making.
+            </p>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white">Multiplayer Spin Rooms</h3>
+            <p>
+              Create live spin rooms and invite friends to watch and participate in real-time. Perfect for 
+              online events, classroom activities, team decisions, and group games. Everyone can see the 
+              wheel spin together!
+            </p>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white">Fully Customizable Wheels</h3>
+            <p>
+              Customize your random picker wheel with custom colors, labels, images, and themes. Create 
+              yes/no wheels, name pickers, raffle wheels, or any custom wheel you need. Save your wheels 
+              and use them again anytime.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   )
