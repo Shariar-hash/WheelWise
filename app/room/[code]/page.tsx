@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, RoomState, ChatMessage, SpinEvent } from '@/lib/supabase'
 import SpinWheel from '@/components/wheel/spin-wheel'
@@ -24,6 +24,8 @@ export default function Room({ params }: { params: { code: string } }) {
   const [targetResult, setTargetResult] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(isOwnerParam);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const isSpinningRef = useRef(false);
+  const errorCountRef = useRef(0);
 
   // Wheel options - make them manageable
   const [wheelOptions, setWheelOptions] = useState([
@@ -42,6 +44,18 @@ export default function Room({ params }: { params: { code: string } }) {
       }
     });
   }, []);
+
+  // Sync owner state from URL parameter (handles SSR/hydration mismatch)
+  useEffect(() => {
+    if (isOwnerParam) {
+      setIsOwner(true);
+    }
+  }, [isOwnerParam]);
+
+  // Keep spinning ref in sync with state for polling closure
+  useEffect(() => {
+    isSpinningRef.current = isSpinning;
+  }, [isSpinning]);
 
   // Heartbeat to maintain participant presence  
   useEffect(() => {
@@ -145,7 +159,7 @@ export default function Room({ params }: { params: { code: string } }) {
             setIsSpinning(existingRoom.is_spinning);
             setResult(existingRoom.current_result || '');
           }
-        } else if (isOwner) {
+        } else if (isOwner || isOwnerParam) {
           // Create new room
           const { data: newRoom, error: createError } = await supabase
             .from('room_state')
@@ -165,6 +179,7 @@ export default function Room({ params }: { params: { code: string } }) {
             setParticipants([name]);
             setRoomOwner(name);
             setWheelOptions(wheelOptions);
+            setIsOwner(true);
           } else {
             throw new Error('Failed to create room');
           }
@@ -203,7 +218,7 @@ export default function Room({ params }: { params: { code: string } }) {
           if (currentRoom && !error) {
             const oldParticipantCount = participants.length;
             const newParticipantCount = currentRoom.participants?.length || 0;
-            const wasSpinning = isSpinning;
+            const wasSpinning = isSpinningRef.current;
             
             // Always update basic state first
             setRoomState(currentRoom);
@@ -235,9 +250,15 @@ export default function Room({ params }: { params: { code: string } }) {
 
             
             setConnected(true);
+            errorCountRef.current = 0;
           }
         } catch (error) {
-          setConnected(false);
+          // Only disconnect after multiple consecutive failures
+          errorCountRef.current++;
+          if (errorCountRef.current > 5) {
+            setConnected(false);
+          }
+          console.error('Polling error:', error);
         }
       }, 500); // Poll every 500ms for fast sync
       
