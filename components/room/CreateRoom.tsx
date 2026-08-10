@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import toast from "react-hot-toast";
-import Link from "next/link";
+
 
 export default function CreateRoom() {
   const [name, setName] = useState("");
@@ -40,14 +40,7 @@ export default function CreateRoom() {
     return () => subscription.unsubscribe();
   }, []);
 
-  function generateRoomCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return code;
-  }
+
 
   async function createRoom() {
     if (!name.trim()) {
@@ -58,30 +51,25 @@ export default function CreateRoom() {
     setLoading(true);
 
     try {
-      const roomCode = generateRoomCode();
-      
-      const { data, error } = await supabase
-        .from('room_state')
-        .insert({
-          room_code: roomCode,
-          room_owner: name.trim(),
-          room_owner_email: user?.email || null,
-          participants: [name.trim()],
-          wheel_options: [
-            { id: '1', label: '🍎 Apple', color: '#ef4444', weight: 1, count: 1 },
-            { id: '2', label: '🍌 Banana', color: '#eab308', weight: 1, count: 1 },
-            { id: '3', label: '🍊 Orange', color: '#f97316', weight: 1, count: 1 },
-            { id: '4', label: '🍇 Grape', color: '#8b5cf6', weight: 1, count: 1 },
-          ]
-        })
-        .select()
-        .single();
+      // Use local API route to generate room code (avoids direct Supabase fetch issues)
+      const response = await fetch('/api/room/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostName: name.trim() }),
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const roomCode = result.roomCode;
 
       setCode(roomCode);
       toast.success("Room created successfully!");
       
+      // Navigate to room page — the room/[code] page will create the Supabase room_state on entry
       setTimeout(() => {
         window.location.href = `/room/${roomCode}?name=${encodeURIComponent(name.trim())}&owner=true`;
       }, 2000);
