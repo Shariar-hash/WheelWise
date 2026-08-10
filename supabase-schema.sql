@@ -12,6 +12,7 @@ create table room_state (
   is_spinning boolean default false,
   current_result text,
   room_owner text not null,
+  room_owner_email text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -21,6 +22,8 @@ create table chat_messages (
   id uuid default gen_random_uuid() primary key,
   room_code text not null,
   sender_name text not null,
+  sender_email text,
+  sender_image text,
   message text not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -47,9 +50,9 @@ alter table chat_messages enable row level security;
 alter table spin_events enable row level security;
 
 -- RLS Policies (allow all for now, can be restricted later)
-create policy "Allow all operations on room_state" on room_state for all using (true);
-create policy "Allow all operations on chat_messages" on chat_messages for all using (true);
-create policy "Allow all operations on spin_events" on spin_events for all using (true);
+create policy "Allow all operations on room_state" on room_state for all using (true) with check (true);
+create policy "Allow all operations on chat_messages" on chat_messages for all using (true) with check (true);
+create policy "Allow all operations on spin_events" on spin_events for all using (true) with check (true);
 
 -- Note: This application uses polling-based sync (every 2 seconds)
 -- No realtime/replication features needed - works in all regions!
